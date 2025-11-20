@@ -1,0 +1,16 @@
+{
+    "python.autoComplete.extraPaths": [
+        "/home/acrv/vgs_gantry_ws/devel/lib/python3/dist-packages",
+        "/home/acrv/ws_moveit/devel/lib/python3/dist-packages",
+        "/opt/ros/noetic/lib/python3/dist-packages",
+        "/home/acrv/vgs_ws/devel/lib/python3.8/site-packages",
+        "/home/acrv/mixcell/source_code"
+    ],
+    "python.analysis.extraPaths": [
+        "/home/acrv/vgs_gantry_ws/devel/lib/python3/dist-packages",
+        "/home/acrv/ws_moveit/devel/lib/python3/dist-packages",
+        "/opt/ros/noetic/lib/python3/dist-packages",
+        "/home/acrv/vgs_ws/devel/lib/python3.8/site-packages",
+        "/home/acrv/mixcell/source_code"
+    ]
+}

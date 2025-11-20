@@ -5,14 +5,16 @@ import tyro
 
 from gello.robots.robot import BimanualRobot, PrintRobot
 from gello.zmq_core.robot_node import ZMQServerRobot
-
+import threading
 
 @dataclass
 class Args:
     robot: str = "xarm"
     robot_port: int = 6001
     hostname: str = "127.0.0.1"
-    robot_ip: str = "192.168.1.10"
+    robot_ip: str = "192.168.1.203"
+    use_sensor:bool = False
+
 
 
 def launch_robot_server(args: Args):
@@ -98,7 +100,23 @@ def launch_robot_server(args: Args):
             )
         server = ZMQServerRobot(robot, port=port, host=args.hostname)
         print(f"Starting robot server on port {port}")
-        server.serve()
+        # server.serve()
+
+        if args.use_sensor:
+            # Run ZMQ server in background, keep main thread for matplotli
+            print("sensor")
+            t = threading.Thread(target=server.serve, daemon=True)
+            t.start()
+
+            # Blocking: runs matplotlib GUI in main thread
+            robot.sensor.start_plot()
+
+            # When you close the plot window, you can optionally wait on the server
+            t.join()
+        else:
+            # No sensor plot → just run server normally
+            server.serve()  
+
 
 
 def main(args):

@@ -11,7 +11,25 @@ from gello.agents.agent import Agent
 from gello.env import RobotEnv
 
 DEFAULT_MAX_JOINT_DELTA = 1.0
+from spatialmath import SE3
+from roboticstoolbox import DHRobot, RevoluteDH, Robot
+import roboticstoolbox as rtb
 
+def define_xarm6():
+    xarm = rtb.DHRobot([
+            rtb.RevoluteDH(a=0.0, alpha=-np.pi/2, d=.267, offset=0),           # Joint 1
+            rtb.RevoluteDH(a=.28948, alpha=0, d=0, offset=-1.384),          # Joint 2
+            rtb.RevoluteDH(a=.0775, alpha=-np.pi/2, d=0, offset= 1.38491),    # Joint 3
+            rtb.RevoluteDH(a=0.0, alpha=np.pi/2, d=.3425, offset=0),          # Joint 4
+            rtb.RevoluteDH(a=.0760, alpha=-np.pi/2, d=0, offset=0),            # Joint 5
+            rtb.RevoluteDH(a=0.0, alpha=0, d=.097, offset=0),                # Joint 6
+        ], name='xArm')
+    return xarm
+
+def compute_forward_kinematics(robot: DHRobot, q: np.ndarray) -> SE3:
+    q = np.asarray(q).flatten()
+    T = robot.fkine(q)  # returns SE3
+    return T.t
 
 def move_to_start_position(
     env: RobotEnv, agent: Agent, max_delta: float = 1.0, steps: int = 25
@@ -91,12 +109,13 @@ class SaveInterface:
         self.data_dir = Path(data_dir).expanduser() if expand_user else Path(data_dir)
         self.agent_name = agent_name
         self.save_path: Optional[Path] = None
+        self.robot = define_xarm6()
 
         print("Save interface enabled. Use keyboard controls:")
         print("  S: Start recording")
         print("  Q: Stop recording")
 
-    def update(self, obs: Dict[str, Any], action: np.ndarray) -> Optional[str]:
+    def update(self, obs: Dict[str, Any], action_joint, action_ee, delta_action_ee) -> Optional[str]:
         """Update save interface and handle saving.
 
         Args:
@@ -120,7 +139,7 @@ class SaveInterface:
             print(f"Saving to {self.save_path}")
         elif state == "save":
             if self.save_path is not None:
-                save_frame(self.save_path, dt, obs, action)
+                save_frame(self.save_path, dt, obs, action_joint, action_ee, delta_action_ee)
         elif state == "normal":
             self.save_path = None
         elif state == "quit":
@@ -182,8 +201,10 @@ def run_control_loop(
 
         # Handle save interface
         if save_interface is not None:
-            result = save_interface.update(obs, action)
+            action_joint = action[0:6]
+            action_ee = compute_forward_kinematics(save_interface.robot,action[0:6])
+            delta_action_ee = action_ee- obs["gripper_position"]
+            result = save_interface.update(obs, action_joint, action_ee, delta_action_ee )
             if result == "quit":
                 break
-
         obs = env.step(action)

@@ -7,6 +7,16 @@ import numpy as np
 from pyquaternion import Quaternion
 
 from gello.robots.robot import Robot
+# from experiments import Gripper_Sub
+# from experiments import prune_sub
+# Add subcriber module for gripper comms
+# from vgs_robot.vgs_perception_n_grasp.src.subscribers.xarm_sub import XarmSubscriber
+# import rospy
+import std_msgs.msg
+from scripts.sensor import SensorProcessor
+from scripts.sensor_positions import SensorPositionCalculator
+from pathlib import Path
+import json
 
 
 def _aa_from_quat(quat: np.ndarray) -> np.ndarray:
@@ -61,7 +71,7 @@ class RobotState:
     j4: float
     j5: float
     j6: float
-    j7: float
+    # j7: float
     aa: np.ndarray
 
     @staticmethod
@@ -82,7 +92,7 @@ class RobotState:
             joints[3],
             joints[4],
             joints[5],
-            joints[6],
+            # joints[6],
             aa,
         )
 
@@ -93,7 +103,7 @@ class RobotState:
         return _quat_from_aa(self.aa)
 
     def joints(self) -> np.ndarray:
-        return np.array([self.j1, self.j2, self.j3, self.j4, self.j5, self.j6, self.j7])
+        return np.array([self.j1, self.j2, self.j3, self.j4, self.j5, self.j6])
 
     def gripper_pos(self) -> float:
         return self.gripper
@@ -123,7 +133,7 @@ class XArmRobot(Robot):
     DEFAULT_MAX_DELTA = 0.05
 
     def num_dofs(self) -> int:
-        return 8
+        return 7
 
     def get_joint_state(self) -> np.ndarray:
         state = self.get_state()
@@ -132,10 +142,10 @@ class XArmRobot(Robot):
         return all_dofs
 
     def command_joint_state(self, joint_state: np.ndarray) -> None:
-        if len(joint_state) == 7:
+        if len(joint_state) == 6:
             self.set_command(joint_state, None)
-        elif len(joint_state) == 8:
-            self.set_command(joint_state[:7], joint_state[7])
+        elif len(joint_state) == 7:
+            self.set_command(joint_state[:6], joint_state[6])
         else:
             raise ValueError(
                 f"Invalid joint state: {joint_state}, len={len(joint_state)}"
@@ -152,8 +162,9 @@ class XArmRobot(Robot):
     def __init__(
         self,
         ip: str = "192.168.1.226",
+        use_sensor:bool = False,
         real: bool = True,
-        control_frequency: float = 50.0,
+        control_frequency: float = 100.0,
         max_delta: float = DEFAULT_MAX_DELTA,
     ):
         print(ip)
@@ -168,7 +179,7 @@ class XArmRobot(Robot):
 
         self._control_frequency = control_frequency
         self._clear_error_states()
-        self._set_gripper_position(self.GRIPPER_OPEN)
+        # self._set_gripper_position(self.GRIPPER_OPEN)
 
         self.last_state_lock = threading.Lock()
         self.target_command_lock = threading.Lock()
@@ -179,9 +190,48 @@ class XArmRobot(Robot):
         }
         self.running = True
         self.command_thread = None
+        self.setup_sensors()
+
+        self.target_position = np.asarray([-.226,-.438,0.693])
+
         if real:
             self.command_thread = threading.Thread(target=self._robot_thread)
             self.command_thread.start()
+
+        if real:
+            self.command_thread = threading.Thread(target=self._robot_thread)
+            self.command_thread.start()
+
+    def setup_sensors(self):
+        """
+        Initialize and start the sensor processor.
+        """
+        self.sensor_ip = "0.0.0.0"
+        self.sensor_port = 5000
+        project_root = Path(__file__).resolve().parents[2]
+        self.config_file = project_root / "scripts" / "sensor_positions.json"
+        self.sensor_calculator = SensorPositionCalculator(self.config_file)
+        self.sensor = SensorProcessor(ip=self.sensor_ip, port=self.sensor_port, mode="raw_data", enable_plot=True)
+        self.sensor.start_websocket()
+        # self.sensor.start_plot()
+        self.positions = self.load_sensor_positions()
+        
+
+    def load_sensor_positions(self):
+        """
+        Loads the predefined sensor positions from a JSON file.
+
+        Returns:
+            np.array: The stored sensor positions.
+        """
+        try:
+            with open(self.config_file, "r") as f:
+                sensor_data = json.load(f)
+            return np.array(sensor_data["positions"])
+        except FileNotFoundError:
+            print(f"Error: Config file '{self.config_file}' not found!")
+            return np.zeros((32, 3))  # Default empty positions if file is missing
+
 
     def get_state(self) -> RobotState:
         with self.last_state_lock:
@@ -207,33 +257,55 @@ class XArmRobot(Robot):
         time.sleep(1)
         self.robot.set_state(state=0)
         time.sleep(1)
-        self.robot.set_gripper_enable(True)
+        # self.robot.set_gripper_enable(True)
         time.sleep(1)
-        self.robot.set_gripper_mode(0)
+        # self.robot.set_gripper_mode(0)
         time.sleep(1)
-        self.robot.set_gripper_speed(3000)
+        # self.robot.set_gripper_speed(3000)
         time.sleep(1)
 
-    def _get_gripper_pos(self) -> float:
-        if self.robot is None:
-            return 0.0
-        code, gripper_pos = self.robot.get_gripper_position()
-        while code != 0 or gripper_pos is None:
-            print(f"Error code {code} in get_gripper_position(). {gripper_pos}")
-            time.sleep(0.001)
-            code, gripper_pos = self.robot.get_gripper_position()
-            if code == 22:
-                self._clear_error_states()
+    # def _get_gripper_pos(self) -> float:
+    #     if self.robot is None:
+    #         return 0.0
+    #     code, gripper_pos = self.robot.get_gripper_position()
+    #     while code != 0 or gripper_pos is None:
+    #         print(f"Error code {code} in get_gripper_position(). {gripper_pos}")
+    #         time.sleep(0.001)
+    #         code, gripper_pos = self.robot.get_gripper_position()
+    #         if code == 22:
+    #             self._clear_error_states()
 
-        normalized_gripper_pos = (gripper_pos - self.GRIPPER_OPEN) / (
-            self.GRIPPER_CLOSE - self.GRIPPER_OPEN
-        )
-        return normalized_gripper_pos
+    #     normalized_gripper_pos = (gripper_pos - self.GRIPPER_OPEN) / (
+    #         self.GRIPPER_CLOSE - self.GRIPPER_OPEN
+    #     )
+    #     return normalized_gripper_pos
 
-    def _set_gripper_position(self, pos: int) -> None:
-        if self.robot is None:
-            return
-        self.robot.set_gripper_position(pos, wait=False)
+    # def _set_gripper_position(self, pos: int) -> None:
+    #     if self.robot is None:
+    #         return
+    #     # self.xarm_sub.set_gripper_position
+    #     # self.robot.set_gripper_position(pos, wait=False)
+    #     # Set up min and max value being read
+        
+    #     gripper_closed = 2444
+    #     gripper_open = 32467
+    #     scale_range = gripper_open - gripper_closed
+    #     raw_scaled_value = int(255 -  (( (np.rad2deg(pos)*255/360) - gripper_closed) * 255 / scale_range) )
+
+    #     # Clamp value
+    #     clamped_value = max(0, min(255, int(round(raw_scaled_value))))  
+        
+    #     # Prepare to send message
+    #     msg = std_msgs.msg.Int16()
+    #     msg.data = clamped_value
+    #     # print(msg.data)
+
+    #     # Send message
+    #     self.gripper_pose_pub.publish(msg)
+    
+
+        # while self.robot.get_is_moving():
+        #     time.sleep(0.01)
         # while self.robot.get_is_moving():
         #     time.sleep(0.01)
 
@@ -252,7 +324,7 @@ class XArmRobot(Robot):
                 joint_delta = np.array(
                     self.target_command["joints"] - self.last_state.joints()
                 )
-                gripper_command = self.target_command["gripper"]
+                # gripper_command = self.target_command["gripper"]
 
             norm = np.linalg.norm(joint_delta)
 
@@ -267,12 +339,12 @@ class XArmRobot(Robot):
                 self.last_state.joints() + delta,
             )
 
-            if gripper_command is not None:
-                set_point = gripper_command
-                self._set_gripper_position(
-                    self.GRIPPER_OPEN
-                    + set_point * (self.GRIPPER_CLOSE - self.GRIPPER_OPEN)
-                )
+            # if gripper_command is not None:
+            #     set_point = gripper_command
+            #     self._set_gripper_position(
+            #         self.GRIPPER_OPEN
+            #         + set_point * (self.GRIPPER_CLOSE - self.GRIPPER_OPEN)
+            #     )
             self.last_state = self._update_last_state()
 
             rate.sleep()
@@ -282,9 +354,9 @@ class XArmRobot(Robot):
                 # Mean, Std, Min, Max, only show 3 decimal places and string pad with 10 spaces
                 frequency = 1 / np.mean(step_times)
                 # print(f"Step time - mean: {np.mean(step_times):10.3f}, std: {np.std(step_times):10.3f}, min: {np.min(step_times):10.3f}, max: {np.max(step_times):10.3f}")
-                print(
-                    f"Low  Level Frequency - mean: {frequency:10.3f}, std: {np.std(frequency):10.3f}, min: {np.min(frequency):10.3f}, max: {np.max(frequency):10.3f}"
-                )
+                # print(
+                #     f"Low  Level Frequency - mean: {frequency:10.3f}, std: {np.std(frequency):10.3f}, min: {np.min(frequency):10.3f}, max: {np.max(frequency):10.3f}"
+                # )
                 step_times = []
 
     def _update_last_state(self) -> RobotState:
@@ -292,9 +364,23 @@ class XArmRobot(Robot):
             if self.robot is None:
                 return RobotState(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, np.zeros(3))
 
-            gripper_pos = self._get_gripper_pos()
+            # print("attempting to get gripper pose")
+            # gripper_pos = self._get_gripper_pos()
+            
+            
+            # raw_gripper_pos = self.gripper_pose_sub.get_latest_position()
+            # gripper_pos = max(0.0, min(1.0, float(raw_gripper_pos) / 255.0))  # Normalize & clamp
 
+
+            # nidhi
+            gripper_pos =0
+
+
+            # print(f'gripper_pose = {gripper_pos}')
+            # gripper_pos = 0.0
+            # print(f"Latest gripper position: {gripper_pos}")           
             code, servo_angle = self.robot.get_servo_angle(is_radian=True)
+            
             while code != 0:
                 print(f"Error code {code} in get_servo_angle().")
                 self._clear_error_states()
@@ -315,6 +401,7 @@ class XArmRobot(Robot):
                 servo_angle,
                 gripper_pos,
                 aa,
+                # gripper_pos,
             )
 
     def _set_position(
@@ -325,18 +412,35 @@ class XArmRobot(Robot):
             return
         # threhold xyz to be in  min max
         ret = self.robot.set_servo_angle_j(joints, wait=False, is_radian=True)
-        if ret in [1, 9]:
+        if ret in [1, 8]:
             self._clear_error_states()
 
+
+    def get_sensor_positions(self, pos):
+        return self.sensor_calculator.calculate_absolute_positions(pos[0:3])
+
+    def get_tactile_data(self):
+        force = np.concatenate([self.sensor.sensor_data_group1[-1], self.sensor.sensor_data_group2[-1]])
+        return force 
+    
     def get_observations(self) -> Dict[str, np.ndarray]:
         state = self.get_state()
         pos_quat = np.concatenate([state.cartesian_pos(), state.quat()])
         joints = self.get_joint_state()
+
+        tact_data = self.get_tactile_data()
+
+        joints = self.get_joint_state()     
+        tact_pos = self.get_sensor_positions(pos_quat[0:3])
         return {
             "joint_positions": joints,  # rotational joint + gripper state
             "joint_velocities": joints,
             "ee_pos_quat": pos_quat,
             "gripper_position": np.array(state.gripper_pos()),
+            "tactile_data" : tact_data,
+            "tactile_positions" : tact_pos,
+            "target_position": self.target_position
+
         }
 
 

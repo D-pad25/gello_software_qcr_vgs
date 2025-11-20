@@ -1,8 +1,10 @@
 import glob
 import time
+import datetime
+from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional, Tuple
-
+from collections import deque
 import numpy as np
 import tyro
 
@@ -10,6 +12,35 @@ from gello.env import RobotEnv
 from gello.robots.robot import PrintRobot
 from gello.utils.launch_utils import instantiate_from_dict
 from gello.zmq_core.robot_node import ZMQClientRobot
+# Custom Imports
+import rospy
+from std_msgs.msg import Float32
+# from experiments import launch_camera_ROS_client
+# from gello.data_utils.format_obs_queue import AsyncSaver
+from gello.robots.xarm_robot import Rate
+
+
+
+
+# from spatialmath import SE3
+# from roboticstoolbox import DHRobot, RevoluteDH, Robot
+# import roboticstoolbox as rtb
+
+# def define_xarm6():
+#     xarm = rtb.DHRobot([
+#             rtb.RevoluteDH(a=0.0, alpha=-np.pi/2, d=.267, offset=0),           # Joint 1
+#             rtb.RevoluteDH(a=.28948, alpha=0, d=0, offset=-1.384),          # Joint 2
+#             rtb.RevoluteDH(a=.0775, alpha=-np.pi/2, d=0, offset= 1.38491),    # Joint 3
+#             rtb.RevoluteDH(a=0.0, alpha=np.pi/2, d=.3425, offset=0),          # Joint 4
+#             rtb.RevoluteDH(a=.0760, alpha=-np.pi/2, d=0, offset=0),            # Joint 5
+#             rtb.RevoluteDH(a=0.0, alpha=0, d=.097, offset=0),                # Joint 6
+#         ], name='xArm')
+#     return xarm
+
+# def compute_forward_kinematics(robot: DHRobot, q: np.ndarray) -> SE3:
+#     q = np.asarray(q).flatten()
+#     T = robot.fkine(q)  # returns SE3
+#     return T.t
 
 
 def print_color(*args, color=None, attrs=(), **kwargs):
@@ -23,18 +54,19 @@ def print_color(*args, color=None, attrs=(), **kwargs):
 @dataclass
 class Args:
     agent: str = "none"
+    label: str = None 
     robot_port: int = 6001
-    wrist_camera_port: int = 5000
-    base_camera_port: int = 5001
+    wrist_camera_port: int = 4000
+    base_camera_port: int = 4001
     hostname: str = "127.0.0.1"
     robot_type: str = None  # only needed for quest agent or spacemouse agent
     hz: int = 100
     start_joints: Optional[Tuple[float, ...]] = None
 
-    gello_port: Optional[str] = None
+    gello_port: Optional[str] = "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FT9HDFUF-if00-port0"
     mock: bool = False
     use_save_interface: bool = False
-    data_dir: str = "~/bc_data"
+    data_dir: str = "~/gello_nidhi/"
     bimanual: bool = False
     verbose: bool = False
 
@@ -44,6 +76,7 @@ class Args:
 
 
 def main(args):
+    # robot_dh = define_xarm6()
     if args.mock:
         robot_client = PrintRobot(8, dont_print=True)
         camera_clients = {}
@@ -140,7 +173,7 @@ def main(args):
             }
             if args.start_joints is None:
                 reset_joints = np.deg2rad(
-                    [0, -90, 90, -90, -90, 0, 0]
+                    [-180, 0, -45, 0, 45, 90]
                 )  # Change this to your own reset joints
             else:
                 reset_joints = np.array(args.start_joints)
