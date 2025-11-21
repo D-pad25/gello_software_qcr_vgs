@@ -47,7 +47,7 @@ def main():
     parser.add_argument(
         "--dir",
         type=str,
-        default="/home/acrv/gello_nidhi/gello/1121_153116",
+        default="/home/acrv/gello_nidhi/gello/1121_194654",
         help="Directory containing .pkl files (default: current directory).",
     )
     args = parser.parse_args()
@@ -88,7 +88,7 @@ def main():
     print(f"Number of samples: {len(timestamps)}")
     print(f"Number of intervals: {len(deltas_ms)}")
     print(f"Mean Δt: {mean_dt:.3f} ms")
-    print(f"Mean hz: {1/(mean_dt):.3f} ms")
+    print(f"Mean hz: {1000/(mean_dt):.3f} ms")
     print(f"Std  Δt: {std_dt:.3f} ms")
 
     # Plot Δt over index

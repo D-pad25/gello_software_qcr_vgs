@@ -78,7 +78,6 @@ class RobotEnv:
         observations["ee_pos_quat"] = robot_obs["ee_pos_quat"]
         observations["gripper_position"] = robot_obs["gripper_position"]
         observations["tactile_data"] = robot_obs["tactile_data"]
-        observations["tactile_positions"] = robot_obs["tactile_positions"]
         observations["target_position"]  = robot_obs["target_position"]  
         return observations
 

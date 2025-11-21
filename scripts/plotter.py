@@ -31,5 +31,5 @@ def run_plot_process(plot_queue):
         im2.set_data(g2)
         return [im1, im2]
 
-    ani = FuncAnimation(fig, update, interval=50, blit=True)
+    ani = FuncAnimation(fig, update, interval=100, blit=True)
     plt.show()

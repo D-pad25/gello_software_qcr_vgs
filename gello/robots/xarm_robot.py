@@ -443,14 +443,12 @@ class XArmRobot(Robot):
         tact_data = self.get_tactile_data()
 
         joints = self.get_joint_state()     
-        tact_pos = self.get_sensor_positions(pos_quat[0:3])
         return {
             "joint_positions": joints,  # rotational joint + gripper state
             "joint_velocities": joints,
             "ee_pos_quat": pos_quat,
             "gripper_position": np.array(state.gripper_pos()),
             "tactile_data" : tact_data,
-            "tactile_positions" : tact_pos,
             "target_position": self.target_position
 
         }
