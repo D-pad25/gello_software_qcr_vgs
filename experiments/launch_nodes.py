@@ -5,7 +5,13 @@ import tyro
 
 from gello.robots.robot import BimanualRobot, PrintRobot
 from gello.zmq_core.robot_node import ZMQServerRobot
-import threading
+import multiprocessing as mp
+
+import std_msgs.msg
+from scripts.sensor import SensorProcessor
+from scripts.sensor_positions import SensorPositionCalculator
+
+from scripts.plotter import run_plot_process
 
 @dataclass
 class Args:
@@ -18,6 +24,40 @@ class Args:
 
 
 def launch_robot_server(args: Args):
+
+
+    if args.use_sensor:
+        plot_queue = mp.Queue(maxsize=200)
+
+        manager = mp.Manager()
+        tactile_dict = manager.dict()      # Shared memory for robot tactile data
+
+        sensor_ip = "0.0.0.0"
+        sensor_port = 5000
+
+        sensor_proc = mp.Process(
+            target=run_sensor_process,
+            args=(sensor_ip, sensor_port, plot_queue, tactile_dict),
+            daemon=False,
+        )
+
+        plot_proc = mp.Process(
+            target=run_plot_process,
+            args=(plot_queue,),
+            daemon=False,
+        )
+
+        sensor_proc.start()
+        plot_proc.start()
+
+    else:
+        plot_queue = None
+        tactile_dict = None
+
+
+
+
+
     port = args.robot_port
     if args.robot == "sim_ur":
         MENAGERIE_ROOT: Path = (
@@ -71,7 +111,7 @@ def launch_robot_server(args: Args):
         if args.robot == "xarm":
             from gello.robots.xarm_robot import XArmRobot
 
-            robot = XArmRobot(ip=args.robot_ip)
+            robot = XArmRobot(ip=args.robot_ip, tactile_shared=tactile_dict)
         elif args.robot == "ur":
             from gello.robots.ur import URRobot
 
@@ -99,29 +139,24 @@ def launch_robot_server(args: Args):
                 f"Robot {args.robot} not implemented, choose one of: sim_ur, xarm, ur, bimanual_ur, none"
             )
         server = ZMQServerRobot(robot, port=port, host=args.hostname)
+        server.serve()
         print(f"Starting robot server on port {port}")
-        # server.serve()
-
-        if args.use_sensor:
-            # Run ZMQ server in background, keep main thread for matplotli
-            print("sensor")
-            t = threading.Thread(target=server.serve, daemon=True)
-            t.start()
-
-            # Blocking: runs matplotlib GUI in main thread
-            robot.sensor.start_plot()
-
-            # When you close the plot window, you can optionally wait on the server
-            t.join()
-        else:
-            # No sensor plot → just run server normally
-            server.serve()  
 
 
+def run_sensor_process(ip, port, plot_queue, tactile_dict):
+    sensor = SensorProcessor(
+        ip=ip,
+        port=port,
+        mode="raw_data",
+        tactile_dict=tactile_dict,
+        plot_queue=plot_queue,
+    )
+    sensor.run_forever()
 
 def main(args):
     launch_robot_server(args)
 
 
 if __name__ == "__main__":
+    mp.set_start_method("spawn", force=True)
     main(tyro.cli(Args))

@@ -12,6 +12,7 @@ from gello.env import RobotEnv
 from gello.robots.robot import PrintRobot
 from gello.utils.launch_utils import instantiate_from_dict
 from gello.zmq_core.robot_node import ZMQClientRobot
+from gello.zmq_core.camera_node import ZMQClientCamera
 # Custom Imports
 import rospy
 from std_msgs.msg import Float32

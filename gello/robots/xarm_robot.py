@@ -162,12 +162,11 @@ class XArmRobot(Robot):
     def __init__(
         self,
         ip: str = "192.168.1.226",
-        use_sensor:bool = False,
+        tactile_shared=None,
         real: bool = True,
         control_frequency: float = 100.0,
         max_delta: float = DEFAULT_MAX_DELTA,
     ):
-        print(ip)
         self.real = real
         self.max_delta = max_delta
         if real:
@@ -179,7 +178,13 @@ class XArmRobot(Robot):
 
         self._control_frequency = control_frequency
         self._clear_error_states()
+        self.tactile_shared = tactile_shared
         # self._set_gripper_position(self.GRIPPER_OPEN)
+        project_root = Path(__file__).resolve().parents[2]
+        self.config_file = project_root / "scripts" / "sensor_positions.json"
+        self.sensor_calculator = SensorPositionCalculator(self.config_file)
+        self.positions = self.load_sensor_positions()
+
 
         self.last_state_lock = threading.Lock()
         self.target_command_lock = threading.Lock()
@@ -190,7 +195,7 @@ class XArmRobot(Robot):
         }
         self.running = True
         self.command_thread = None
-        self.setup_sensors()
+
 
         self.target_position = np.asarray([-.226,-.438,0.693])
 
@@ -202,19 +207,26 @@ class XArmRobot(Robot):
             self.command_thread = threading.Thread(target=self._robot_thread)
             self.command_thread.start()
 
-    def setup_sensors(self):
+
+    def get_tactile_data(self):
         """
-        Initialize and start the sensor processor.
+        Read latest tactile data from shared dict.
+        If not available yet, return zeros.
         """
-        self.sensor_ip = "0.0.0.0"
-        self.sensor_port = 5000
-        project_root = Path(__file__).resolve().parents[2]
-        self.config_file = project_root / "scripts" / "sensor_positions.json"
-        self.sensor_calculator = SensorPositionCalculator(self.config_file)
-        self.sensor = SensorProcessor(ip=self.sensor_ip, port=self.sensor_port, mode="raw_data", enable_plot=True)
-        self.sensor.start_websocket()
-        # self.sensor.start_plot()
-        self.positions = self.load_sensor_positions()
+        if self.tactile_shared is None:
+            # no sensors enabled
+            return np.zeros((32, 3))
+
+        g1 = self.tactile_shared.get("g1", None)
+        g2 = self.tactile_shared.get("g2", None)
+
+        if g1 is None or g2 is None:
+            return np.zeros((32, 3))
+
+        g1 = np.array(g1)
+        g2 = np.array(g2)
+
+        return np.concatenate([g1, g2], axis=0)
         
 
     def load_sensor_positions(self):
@@ -419,9 +431,9 @@ class XArmRobot(Robot):
     def get_sensor_positions(self, pos):
         return self.sensor_calculator.calculate_absolute_positions(pos[0:3])
 
-    def get_tactile_data(self):
-        force = np.concatenate([self.sensor.sensor_data_group1[-1], self.sensor.sensor_data_group2[-1]])
-        return force 
+    # def get_tactile_data(self):
+    #     force = np.concatenate([self.sensor.sensor_data_group1[-1], self.sensor.sensor_data_group2[-1]])
+    #     return force 
     
     def get_observations(self) -> Dict[str, np.ndarray]:
         state = self.get_state()
