@@ -12,7 +12,6 @@ from gello.robots.robot import Robot
 # Add subcriber module for gripper comms
 # from vgs_robot.vgs_perception_n_grasp.src.subscribers.xarm_sub import XarmSubscriber
 # import rospy
-import std_msgs.msg
 from scripts.sensor import SensorProcessor
 from scripts.sensor_positions import SensorPositionCalculator
 from pathlib import Path
@@ -130,7 +129,7 @@ class XArmRobot(Robot):
     GRIPPER_OPEN = 800
     GRIPPER_CLOSE = 0
     #  MAX_DELTA = 0.2
-    DEFAULT_MAX_DELTA = 0.05
+    DEFAULT_MAX_DELTA = 0.01
 
     def num_dofs(self) -> int:
         return 7
@@ -164,7 +163,7 @@ class XArmRobot(Robot):
         ip: str = "192.168.1.226",
         tactile_shared=None,
         real: bool = True,
-        control_frequency: float = 100.0,
+        control_frequency: float = 30.0,
         max_delta: float = DEFAULT_MAX_DELTA,
     ):
         self.real = real

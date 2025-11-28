@@ -2,10 +2,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
+import multiprocessing as mp
+import time
 
-def run_plot_process(plot_queue):
+def run_plot_process(plot_queue: mp.Queue):
     """Runs in its own process; reads from queue and plots heatmap or timeseries."""
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 4))
+    fig, (ax2, ax1) = plt.subplots(1, 2, figsize=(8, 4))
 
     g1_grid = np.zeros((4, 4))
     g2_grid = np.zeros((4, 4))
@@ -14,6 +16,7 @@ def run_plot_process(plot_queue):
     im2 = ax2.imshow(g2_grid, vmin=0, vmax=100, origin="lower")
 
     def update(_frame):
+        time.sleep(0.01)
         # drain queue; keep the last packet
         latest = None
         while True:

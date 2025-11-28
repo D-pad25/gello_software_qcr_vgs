@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
 # ========= CONFIG =========
-DATA_DIR = "/home/acrv/gello_nidhi/gello/1121_190015"   # <-- change this
+DATA_DIR = "/run/user/1000/gvfs/sftp:host=aqua.qut.edu.au,user=n11457830/home/n11457830/gello/1128_102348"   # <-- change this
 
 pattern = os.path.join(DATA_DIR, "*.pkl")
 paths = sorted(glob.glob(pattern))

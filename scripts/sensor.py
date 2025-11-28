@@ -56,6 +56,8 @@ class SensorProcessor:
             return
 
         group1_raw, group2_raw = self._extract_sensor_data(data)
+        # mess_creation_time, mess_send_time, g1_time, g2_time = self._extract_sensor_time_data(data)
+        
         if group1_raw is None or group2_raw is None:
             return
 
@@ -83,6 +85,21 @@ class SensorProcessor:
         except (ValueError, KeyError):
             print("Invalid or missing sensor data")
             return None, None
+        
+
+    def _extract_sensor_time_data(self, data):
+        try:
+            mess_creation_time = [data["time"].split(",")]
+            mess_send_time = [data["sendtime"].split(",")]
+            g1_time = [int(v, 16) for v in data["1"]["time"].split(",")]
+            g2_time = [int(v, 16) for v in data["2"]["time"].split(",")]
+            return mess_creation_time, mess_send_time, g1_time, g2_time
+        except (ValueError, KeyError):
+            print("Invalid or missing sensor data")
+            return None, None
+
+
+
 
     def _calibrate_baselines(self, g1_raw, g2_raw):
         g1 = np.array([g1_raw[i * 3:(i + 1) * 3] for i in range(self.num_sensors)])
@@ -127,6 +144,11 @@ class SensorProcessor:
             # Example: send the z-component for a heatmap
             g1_z = f1[:, 2]
             g2_z = f2[:, 2]
+            # timestamp_now = time.now()
+            # File - Write - Append - The data
+            # file.write(timestamp_now, append)
+            # file.write(data, append)
+            # file.write(\n, append)
             try:
                 self.plot_queue.put_nowait((g1_z, g2_z))
             except:

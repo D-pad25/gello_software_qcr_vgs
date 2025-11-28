@@ -10,7 +10,7 @@ import numpy as np
 from gello.agents.agent import Agent
 from gello.env import RobotEnv
 
-DEFAULT_MAX_JOINT_DELTA = 1.0
+DEFAULT_MAX_JOINT_DELTA = 0.01
 
 
 

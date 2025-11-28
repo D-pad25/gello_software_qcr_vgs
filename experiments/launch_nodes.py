@@ -27,7 +27,7 @@ def launch_robot_server(args: Args):
 
 
     if args.use_sensor:
-        plot_queue = mp.Queue(maxsize=200)
+        plot_queue = mp.Queue(maxsize=1)
 
         manager = mp.Manager()
         tactile_dict = manager.dict()      # Shared memory for robot tactile data
