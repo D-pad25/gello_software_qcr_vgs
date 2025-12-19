@@ -7,11 +7,11 @@ from gello.robots.robot import BimanualRobot, PrintRobot
 from gello.zmq_core.robot_node import ZMQServerRobot
 import multiprocessing as mp
 
-import std_msgs.msg
-from scripts.sensor import SensorProcessor
-from scripts.sensor_positions import SensorPositionCalculator
+# import std_msgs.msg
+# from scripts.sensor import SensorProcessor
+# from scripts.plotter import run_plot_process
+import time
 
-from scripts.plotter import run_plot_process
 
 @dataclass
 class Args:
@@ -19,40 +19,41 @@ class Args:
     robot_port: int = 6001
     hostname: str = "127.0.0.1"
     robot_ip: str = "192.168.1.203"
-    use_sensor:bool = False
+    # use_sensor:bool = False
 
 
 
 def launch_robot_server(args: Args):
 
 
-    if args.use_sensor:
-        plot_queue = mp.Queue(maxsize=1)
+    # if args.use_sensor:
+    #     plot_queue = mp.Queue(maxsize=1)
 
-        manager = mp.Manager()
-        tactile_dict = manager.dict()      # Shared memory for robot tactile data
+    #     manager = mp.Manager()
+    #     tactile_dict = manager.dict()      # Shared memory for robot tactile data
 
-        sensor_ip = "0.0.0.0"
-        sensor_port = 5000
+    #     sensor_ip = "0.0.0.0"
+    #     sensor_port = 5000
 
-        sensor_proc = mp.Process(
-            target=run_sensor_process,
-            args=(sensor_ip, sensor_port, plot_queue, tactile_dict),
-            daemon=False,
-        )
+    #     sensor_proc = mp.Process(
+    #         target=run_sensor_process,
+    #         args=(sensor_ip, sensor_port, plot_queue, tactile_dict),
+    #         daemon=False,
+    #     )
 
-        plot_proc = mp.Process(
-            target=run_plot_process,
-            args=(plot_queue,),
-            daemon=False,
-        )
+    #     plot_proc = mp.Process(
+    #         target=run_plot_process,
+    #         args=(plot_queue,),
+    #         daemon=False,
+    #     )
+    #     time.sleep(1)
 
-        sensor_proc.start()
-        plot_proc.start()
+    #     sensor_proc.start()
+    #     plot_proc.start()
 
-    else:
-        plot_queue = None
-        tactile_dict = None
+    # else:
+    #     plot_queue = None
+    #     tactile_dict = None
 
 
 
@@ -111,7 +112,7 @@ def launch_robot_server(args: Args):
         if args.robot == "xarm":
             from gello.robots.xarm_robot import XArmRobot
 
-            robot = XArmRobot(ip=args.robot_ip, tactile_shared=tactile_dict)
+            robot = XArmRobot(ip=args.robot_ip)
         elif args.robot == "ur":
             from gello.robots.ur import URRobot
 
@@ -143,15 +144,15 @@ def launch_robot_server(args: Args):
         print(f"Starting robot server on port {port}")
 
 
-def run_sensor_process(ip, port, plot_queue, tactile_dict):
-    sensor = SensorProcessor(
-        ip=ip,
-        port=port,
-        mode="raw_data",
-        tactile_dict=tactile_dict,
-        plot_queue=plot_queue,
-    )
-    sensor.run_forever()
+# def run_sensor_process(ip, port, plot_queue, tactile_dict):
+#     sensor = SensorProcessor(
+#         ip=ip,
+#         port=port,
+#         mode="raw_data",
+#         tactile_dict=tactile_dict,
+#         plot_queue=plot_queue,
+#     )
+#     sensor.run_forever()
 
 def main(args):
     launch_robot_server(args)

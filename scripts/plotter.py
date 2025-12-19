@@ -12,8 +12,8 @@ def run_plot_process(plot_queue: mp.Queue):
     g1_grid = np.zeros((4, 4))
     g2_grid = np.zeros((4, 4))
 
-    im1 = ax1.imshow(g1_grid, vmin=0, vmax=100, origin="lower")
-    im2 = ax2.imshow(g2_grid, vmin=0, vmax=100, origin="lower")
+    im1 = ax1.imshow(g1_grid, vmin=5, vmax=100, origin="lower")
+    im2 = ax2.imshow(g2_grid, vmin=5, vmax=100, origin="lower")
 
     def update(_frame):
         time.sleep(0.01)
@@ -34,5 +34,5 @@ def run_plot_process(plot_queue: mp.Queue):
         im2.set_data(g2)
         return [im1, im2]
 
-    ani = FuncAnimation(fig, update, interval=100, blit=True)
+    ani = FuncAnimation(fig, update, interval=10, blit=True)
     plt.show()

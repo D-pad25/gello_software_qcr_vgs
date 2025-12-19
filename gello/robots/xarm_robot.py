@@ -12,8 +12,7 @@ from gello.robots.robot import Robot
 # Add subcriber module for gripper comms
 # from vgs_robot.vgs_perception_n_grasp.src.subscribers.xarm_sub import XarmSubscriber
 # import rospy
-from scripts.sensor import SensorProcessor
-from scripts.sensor_positions import SensorPositionCalculator
+# from scripts.sensor_positions import SensorPositionCalculator
 from pathlib import Path
 import json
 
@@ -161,9 +160,9 @@ class XArmRobot(Robot):
     def __init__(
         self,
         ip: str = "192.168.1.226",
-        tactile_shared=None,
+        # tactile_shared=None,
         real: bool = True,
-        control_frequency: float = 30.0,
+        control_frequency: float = 100.0,
         max_delta: float = DEFAULT_MAX_DELTA,
     ):
         self.real = real
@@ -177,12 +176,12 @@ class XArmRobot(Robot):
 
         self._control_frequency = control_frequency
         self._clear_error_states()
-        self.tactile_shared = tactile_shared
+        # self.tactile_shared = tactile_shared
         # self._set_gripper_position(self.GRIPPER_OPEN)
         project_root = Path(__file__).resolve().parents[2]
-        self.config_file = project_root / "scripts" / "sensor_positions.json"
-        self.sensor_calculator = SensorPositionCalculator(self.config_file)
-        self.positions = self.load_sensor_positions()
+        # self.config_file = project_root / "scripts" / "sensor_positions.json"
+        # self.sensor_calculator = SensorPositionCalculator(self.config_file)
+        # self.positions = self.load_sensor_positions()
 
 
         self.last_state_lock = threading.Lock()
@@ -207,25 +206,32 @@ class XArmRobot(Robot):
             self.command_thread.start()
 
 
-    def get_tactile_data(self):
-        """
-        Read latest tactile data from shared dict.
-        If not available yet, return zeros.
-        """
-        if self.tactile_shared is None:
-            # no sensors enabled
-            return np.zeros((32, 3))
+    # def get_tactile_data(self):
+    #     """
+    #     Read latest tactile data from shared dict.
+    #     If not available yet, return zeros.
+    #     """
+    #     if self.tactile_shared is None:
+    #         # no sensors enabled
+    #         return np.zeros((32, 3))
 
-        g1 = self.tactile_shared.get("g1", None)
-        g2 = self.tactile_shared.get("g2", None)
+    #     g1 = self.tactile_shared.get("g1", None)
+    #     g2 = self.tactile_shared.get("g2", None)
 
-        if g1 is None or g2 is None:
-            return np.zeros((32, 3))
 
-        g1 = np.array(g1)
-        g2 = np.array(g2)
+    #     mess_creation_time = self.tactile_shared.get("mess_creation_time", None)
+    #     mess_send_time = self.tactile_shared.get("mess_send_time", None)
+    #     g1_time = self.tactile_shared.get("g1_time", None)
+    #     g2_time = self.tactile_shared.get("g2_time", None)
 
-        return np.concatenate([g1, g2], axis=0)
+    #     if g1 is None or g2 is None:
+    #         g1 = np.zeros((32, 3))
+    #         g2 = np.zeros((32, 3))
+
+    #     g1 = np.array(g1)
+    #     g2 = np.array(g2)
+
+    #     return np.concatenate([g1, g2], axis=0), np.array([mess_creation_time, mess_send_time,g1_time,g2_time])
         
 
     def load_sensor_positions(self):
@@ -427,8 +433,8 @@ class XArmRobot(Robot):
             self._clear_error_states()
 
 
-    def get_sensor_positions(self, pos):
-        return self.sensor_calculator.calculate_absolute_positions(pos[0:3])
+    # def get_sensor_positions(self, pos):
+    #     return self.sensor_calculator.calculate_absolute_positions(pos[0:3])
 
     # def get_tactile_data(self):
     #     force = np.concatenate([self.sensor.sensor_data_group1[-1], self.sensor.sensor_data_group2[-1]])
@@ -439,7 +445,7 @@ class XArmRobot(Robot):
         pos_quat = np.concatenate([state.cartesian_pos(), state.quat()])
         joints = self.get_joint_state()
 
-        tact_data = self.get_tactile_data()
+        # tact_data , tact_time = self.get_tactile_data()
 
         joints = self.get_joint_state()     
         return {
@@ -447,8 +453,9 @@ class XArmRobot(Robot):
             "joint_velocities": joints,
             "ee_pos_quat": pos_quat,
             "gripper_position": np.array(state.gripper_pos()),
-            "tactile_data" : tact_data,
-            "target_position": self.target_position
+            # "tactile_data" : tact_data,
+            "target_position": self.target_position,
+            # "tact_time" : tact_time,
 
         }
 

@@ -1,3 +1,45 @@
+VGS lab data collection notes:
+
+
+branch to run the tactile sensors at 100 hz. 
+
+
+xela sensor:
+
+ ls -l /dev/ttyUSB*
+
+
+sudo slcand -o -s8 -t hw -S 3000000 /dev/ttyUSB0
+sudo ifconfig slcan0 up
+
+cd xela
+./xela_server
+
+Camera changes for single camera
+gello/env.py get_obs()
+experiments/run_env.py  camera_clients
+
+
+
+gello env
+source .venv/bin/activate 
+sudo chown $USER /dev/ttyUSB2
+
+
+Things to run for collection data:
+
+python experiments/launch_camera_nodes.py 
+python experiments/launch_nodes.py --robot xarm --use_sensor
+python experiments/run_env.py --agent=gello --use-save-interface
+python experiments/launch_camera_clients.py 
+
+
+
+
+
+
+
+
 # GELLO: General, Low-Cost, and Intuitive Teleoperation Framework
 
 <p align="center">
