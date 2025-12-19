@@ -161,9 +161,8 @@ class XArmRobot(Robot):
     def __init__(
         self,
         ip: str = "192.168.1.226",
-        tactile_shared=None,
         real: bool = True,
-        control_frequency: float = 30.0,
+        control_frequency: float = 100.0,
         max_delta: float = DEFAULT_MAX_DELTA,
     ):
         self.real = real
@@ -177,12 +176,9 @@ class XArmRobot(Robot):
 
         self._control_frequency = control_frequency
         self._clear_error_states()
-        self.tactile_shared = tactile_shared
         # self._set_gripper_position(self.GRIPPER_OPEN)
         project_root = Path(__file__).resolve().parents[2]
-        self.config_file = project_root / "scripts" / "sensor_positions.json"
-        self.sensor_calculator = SensorPositionCalculator(self.config_file)
-        self.positions = self.load_sensor_positions()
+
 
 
         self.last_state_lock = threading.Lock()
@@ -207,41 +203,6 @@ class XArmRobot(Robot):
             self.command_thread.start()
 
 
-    def get_tactile_data(self):
-        """
-        Read latest tactile data from shared dict.
-        If not available yet, return zeros.
-        """
-        if self.tactile_shared is None:
-            # no sensors enabled
-            return np.zeros((32, 3))
-
-        g1 = self.tactile_shared.get("g1", None)
-        g2 = self.tactile_shared.get("g2", None)
-
-        if g1 is None or g2 is None:
-            return np.zeros((32, 3))
-
-        g1 = np.array(g1)
-        g2 = np.array(g2)
-
-        return np.concatenate([g1, g2], axis=0)
-        
-
-    def load_sensor_positions(self):
-        """
-        Loads the predefined sensor positions from a JSON file.
-
-        Returns:
-            np.array: The stored sensor positions.
-        """
-        try:
-            with open(self.config_file, "r") as f:
-                sensor_data = json.load(f)
-            return np.array(sensor_data["positions"])
-        except FileNotFoundError:
-            print(f"Error: Config file '{self.config_file}' not found!")
-            return np.zeros((32, 3))  # Default empty positions if file is missing
 
 
     def get_state(self) -> RobotState:
@@ -439,15 +400,12 @@ class XArmRobot(Robot):
         pos_quat = np.concatenate([state.cartesian_pos(), state.quat()])
         joints = self.get_joint_state()
 
-        tact_data = self.get_tactile_data()
-
         joints = self.get_joint_state()     
         return {
             "joint_positions": joints,  # rotational joint + gripper state
             "joint_velocities": joints,
             "ee_pos_quat": pos_quat,
             "gripper_position": np.array(state.gripper_pos()),
-            "tactile_data" : tact_data,
             "target_position": self.target_position
 
         }

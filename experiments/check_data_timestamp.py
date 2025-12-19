@@ -47,7 +47,7 @@ def main():
     parser.add_argument(
         "--dir",
         type=str,
-        default="/run/user/1000/gvfs/sftp:host=aqua.qut.edu.au,user=n11457830/home/n11457830/gello/1128_102348",
+        default= "/run/user/1001/gvfs/sftp:host=aqua.qut.edu.au,user=n11457830/mnt/hpccs01/home/n11457830/gello/dec19_tact/gello/1219_151817",   # <-- change this",
         help="Directory containing .pkl files (default: current directory).",
     )
     args = parser.parse_args()

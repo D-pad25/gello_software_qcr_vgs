@@ -13,13 +13,11 @@ from gello.robots.robot import PrintRobot
 from gello.utils.launch_utils import instantiate_from_dict
 from gello.zmq_core.robot_node import ZMQClientRobot
 from gello.zmq_core.camera_node import ZMQClientCamera
-# Custom Imports
-import rospy
-from std_msgs.msg import Float32
+
 # from experiments import launch_camera_ROS_client
 # from gello.data_utils.format_obs_queue import AsyncSaver
 from gello.robots.xarm_robot import Rate
-
+from experiments.zmq_tactile_client import ZMQClientTactile
 
 
 
@@ -61,16 +59,20 @@ class Args:
     base_camera_port: int = 4001
     hostname: str = "127.0.0.1"
     robot_type: str = None  # only needed for quest agent or spacemouse agent
-    hz: int = 30
+    hz: int = 100
     start_joints: Optional[Tuple[float, ...]] = None
 
     gello_port: Optional[str] = "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FT9HDFUF-if00-port0"
     mock: bool = False
     use_save_interface: bool = False
     # data_dir: str = "~/gello_nidhi/"
-    data_dir: str = "/run/user/1000/gvfs/sftp:host=aqua.qut.edu.au,user=n11457830/home/n11457830"
+    data_dir: str = "/run/user/1001/gvfs/sftp:host=aqua.qut.edu.au,user=n11457830/mnt/hpccs01/home/n11457830/gello/dec19_tact/"
     bimanual: bool = False
     verbose: bool = False
+    use_sesnor: bool = True
+    use_sensor: bool = True
+    tactile_port: int = 7001
+    tactile_hz: int = 100
 
     def __post_init__(self):
         if self.start_joints is not None:
@@ -89,7 +91,16 @@ def main(args):
             # "base": ZMQClientCamera(port=args.base_camera_port, host=args.hostname),
         }
         robot_client = ZMQClientRobot(port=args.robot_port, host=args.hostname)
-    env = RobotEnv(robot_client, control_rate_hz=args.hz, camera_dict=camera_clients)
+        tactile_client = None
+        if args.use_sensor:
+            tactile_client = ZMQClientTactile(
+                host=args.hostname,
+                port=args.tactile_port,
+                hz=float(args.tactile_hz),
+                timeout_ms=200,
+            )
+            tactile_client.start()
+    env = RobotEnv(robot_client, control_rate_hz=args.hz, camera_dict=camera_clients, tactile_client=tactile_client)
 
     agent_cfg = {}
     if args.bimanual:

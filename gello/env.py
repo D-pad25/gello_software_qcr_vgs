@@ -24,10 +24,12 @@ class RobotEnv:
         robot: Robot,
         control_rate_hz: float = 100.0,
         camera_dict: Optional[Dict[str, CameraDriver]] = None,
+        tactile_client: Optional[Any] = None, 
     ) -> None:
         self._robot = robot
         self._rate = Rate(control_rate_hz)
         self._camera_dict = {} if camera_dict is None else camera_dict
+        self._tactile_client = tactile_client  
 
     def robot(self) -> Robot:
         """Get the robot object.
@@ -77,10 +79,15 @@ class RobotEnv:
         observations["joint_velocities"] = robot_obs["joint_velocities"]
         observations["ee_pos_quat"] = robot_obs["ee_pos_quat"]
         observations["gripper_position"] = robot_obs["gripper_position"]
-        observations["tactile_data"] = robot_obs["tactile_data"]
         observations["target_position"]  = robot_obs["target_position"]  
-        return observations
+        if self._tactile_client is not None:
+            tact_obs = self._tactile_client.get_obs()
+            # observations["tactile_ok"] = tact_obs["tactile_ok"]
+            # observations["tactile_last_ok_time"] = tact_obs["tactile_last_ok_time"]
+            observations["tactile_data"] = tact_obs["tactile_data"]      # (32,3) or None
+            observations["tact_time"] = tact_obs["tact_time"]
 
+        return observations
 
 def main() -> None:
     pass
