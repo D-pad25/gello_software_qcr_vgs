@@ -62,24 +62,17 @@ class Args:
     base_camera_port: int = 4001
     hostname: str = "127.0.0.1"
     robot_type: str = None  # only needed for quest agent or spacemouse agent
-    hz: int = 100
+    hz: int = 30
     start_joints: Optional[Tuple[float, ...]] = None
 
     gello_port: Optional[str] = "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FT9HDFUF-if00-port0"
     mock: bool = False
+    prune: bool = False
     use_save_interface: bool = False
     # data_dir: str = "~/gello/nidhi/"
     data_dir: str = "/run/user/1001/gvfs/sftp:host=aqua.qut.edu.au,user=n11457830/mnt/hpccs01/home/n11457830/gello/dec19th_plant/"
     bimanual: bool = False
     verbose: bool = False
-    use_sesnor: bool = True
-    use_sensor: bool = True
-    tactile_port: int = 7001
-    tactile_hz: int = 60
-
-
-
-
     def __post_init__(self):
         if self.start_joints is not None:
             self.start_joints = np.array(self.start_joints)
@@ -97,18 +90,12 @@ def main(args):
             "base": ZMQClientCamera(port=args.base_camera_port, host=args.hostname),
         }
         robot_client = ZMQClientRobot(port=args.robot_port, host=args.hostname)
-
-
-        tactile_client = None
-        if args.use_sensor:
-            tactile_client = ZMQClientTactile(
-                host=args.hostname,
-                port=args.tactile_port,
-                hz=float(args.tactile_hz),
-                timeout_ms=200,
-            )
-            tactile_client.start()
-    env = RobotEnv(robot_client, control_rate_hz=args.hz, camera_dict=camera_clients, tactile_client=tactile_client)
+    if args.prune:
+        from gello.prune_env import RobotEnv
+        env = RobotEnv(robot_client, control_rate_hz=args.hz, camera_dict=camera_clients)
+    else:
+        from gello.env import RobotEnv
+        env = RobotEnv(robot_client, control_rate_hz=args.hz, camera_dict=camera_clients)
 
     agent_cfg = {}
     if args.bimanual:
@@ -198,7 +185,6 @@ def main(args):
                 )  # Change this to your own reset joints
             else:
                 reset_joints = np.array(args.start_joints)
-
             curr_joints = env.get_obs()["joint_positions"]
             if reset_joints.shape == curr_joints.shape:
                 max_delta = (np.abs(curr_joints - reset_joints)).max()
@@ -240,7 +226,17 @@ def main(args):
     id_max_joint_delta = np.argmax(abs_deltas)
 
     max_joint_delta = 0.8
-    if abs_deltas[id_max_joint_delta] > max_joint_delta:
+    ######################################################################
+    # If pruning mode, exclude the last joint from the delta check
+    if args.prune:
+        print("ignoring last output")
+        check_range = slice(0, -1)  # all except the last element
+    else:
+        check_range = slice(None)   # all elements
+    # if abs_deltas[id_max_joint_delta] > max_joint_delta:
+    # Apply the threshold check only on the relevant joints
+    abs_deltas_check = abs_deltas[check_range]
+    if np.any(abs_deltas_check > max_joint_delta):
         id_mask = abs_deltas > max_joint_delta
         print()
         ids = np.arange(len(id_mask))[id_mask]
@@ -274,7 +270,8 @@ def main(args):
     obs = env.get_obs()
     joints = obs["joint_positions"]
     action = agent.act(obs)
-    if (action - joints > 0.5).any():
+    diff = action[check_range] - joints[check_range]
+    if (diff > 0.5).any():
         print("Action is too big")
 
         # print which joints are too big

@@ -113,6 +113,10 @@ def launch_robot_server(args: Args):
             from gello.robots.xarm_robot import XArmRobot
 
             robot = XArmRobot(ip=args.robot_ip)
+        elif args.robot == "xarm_prune":
+            print(">>> launch_nodes.py loaded successfully")
+            from gello.robots.xarm_robot_prune import XArmRobotPrune
+            robot = XArmRobotPrune(ip=args.robot_ip)
         elif args.robot == "ur":
             from gello.robots.ur import URRobot
 

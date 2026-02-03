@@ -6,11 +6,11 @@ from typing import Dict, Optional
 import numpy as np
 from pyquaternion import Quaternion
 
-from gello.robots.robot import Robot
-from experiments import Gripper_Sub
+from gello.robots.prune_robot import Robot
+from experiments import prune_sub
+# Add subcriber module for prune comms
+# from vgs_robot.vgs_perception_n_grasp.src.subscribers.xarm_sub import XarmSubscriber
 import rospy
-from pathlib import Path
-import json
 import std_msgs.msg
 
 
@@ -59,35 +59,33 @@ class RobotState:
     x: float
     y: float
     z: float
-    gripper: float
+    prune: float
     j1: float
     j2: float
     j3: float
     j4: float
     j5: float
     j6: float
-    # j7: float
     aa: np.ndarray
 
     @staticmethod
     def from_robot(
         cartesian: np.ndarray,
         joints: np.ndarray,
-        gripper: float,
+        prune: float,
         aa: np.ndarray,
     ) -> "RobotState":
         return RobotState(
             cartesian[0],
             cartesian[1],
             cartesian[2],
-            gripper,
+            prune,
             joints[0],
             joints[1],
             joints[2],
             joints[3],
             joints[4],
             joints[5],
-            # joints[6],
             aa,
         )
 
@@ -100,8 +98,8 @@ class RobotState:
     def joints(self) -> np.ndarray:
         return np.array([self.j1, self.j2, self.j3, self.j4, self.j5, self.j6])
 
-    def gripper_pos(self) -> float:
-        return self.gripper
+    def prune_pos(self) -> float:
+        return self.prune
 
 
 class Rate:
@@ -120,20 +118,20 @@ class Rate:
             time.sleep(remaining)
         self.last = time.time()
 
-
-class XArmRobot(Robot):
-    GRIPPER_OPEN = 800
-    GRIPPER_CLOSE = 0
-    #  MAX_DELTA = 0.2
+######################################################################
+####################### CUSTOM PRUNE XARM CLASS ####################
+######################################################################
+class XArmRobotPrune(Robot):
+    #sets max speed to joint servo error
     DEFAULT_MAX_DELTA = 0.01
-
+    
     def num_dofs(self) -> int:
         return 7
 
     def get_joint_state(self) -> np.ndarray:
         state = self.get_state()
-        gripper = state.gripper_pos()
-        all_dofs = np.concatenate([state.joints(), np.array([gripper])])
+        pruner = state.prune_pos()
+        all_dofs = np.concatenate([state.joints(), np.array([pruner])])
         return all_dofs
 
     def command_joint_state(self, joint_state: np.ndarray) -> None:
@@ -156,11 +154,12 @@ class XArmRobot(Robot):
 
     def __init__(
         self,
-        ip: str = "192.168.1.203",
+        ip: str = "192.168.1.226",
         real: bool = True,
         control_frequency: float = 30.0,
         max_delta: float = DEFAULT_MAX_DELTA,
     ):
+        print(ip)
         self.real = real
         self.max_delta = max_delta
         if real:
@@ -170,9 +169,13 @@ class XArmRobot(Robot):
         else:
             self.robot = None
 
+        # self.xarm_sub = XarmSubscriber()
+        print("Calling rospy.init_node")
         rospy.init_node('xarm_gello_node')
-        self.gripper_pose_sub = Gripper_Sub.GripperPoseSubscriber()
-        self.gripper_pose_pub = rospy.Publisher('/gripper_command', std_msgs.msg.Int16, queue_size=10)
+        print("After rospy.init_node")
+        self.prune_pose_sub = prune_sub.PruneSubscriber()
+        self.prune_pose_pub = rospy.Publisher('/prune_command', std_msgs.msg.Int16, queue_size=10)
+
         self._control_frequency = control_frequency
         self._clear_error_states()
 
@@ -181,7 +184,7 @@ class XArmRobot(Robot):
         self.last_state = self._update_last_state()
         self.target_command = {
             "joints": self.last_state.joints(),
-            "gripper": 0,
+            "prune": 0,
         }
         self.running = True
         self.command_thread = None
@@ -193,11 +196,11 @@ class XArmRobot(Robot):
         with self.last_state_lock:
             return self.last_state
 
-    def set_command(self, joints: np.ndarray, gripper: Optional[float] = None) -> None:
+    def set_command(self, joints: np.ndarray, prune: Optional[float] = None) -> None:
         with self.target_command_lock:
             self.target_command = {
                 "joints": joints,
-                "gripper": gripper,
+                "prune": prune,
             }
 
     def _clear_error_states(self):
@@ -213,51 +216,34 @@ class XArmRobot(Robot):
         time.sleep(1)
         self.robot.set_state(state=0)
         time.sleep(1)
-        # self.robot.set_gripper_enable(True)
+        # self.robot.set_prune_enable(True)
         time.sleep(1)
-        # self.robot.set_gripper_mode(0)
+        # self.robot.set_prune_mode(0)
         time.sleep(1)
-        # self.robot.set_gripper_speed(3000)
+        # self.robot.set_prune_speed(3000)
         time.sleep(1)
 
-    # def _get_gripper_pos(self) -> float:
-    #     if self.robot is None:
-    #         return 0.0
-    #     code, gripper_pos = self.robot.get_gripper_position()
-    #     while code != 0 or gripper_pos is None:
-    #         print(f"Error code {code} in get_gripper_position(). {gripper_pos}")
-    #         time.sleep(0.001)
-    #         code, gripper_pos = self.robot.get_gripper_position()
-    #         if code == 22:
-    #             self._clear_error_states()
-
-    #     normalized_gripper_pos = (gripper_pos - self.GRIPPER_OPEN) / (
-    #         self.GRIPPER_CLOSE - self.GRIPPER_OPEN
-    #     )
-    #     return normalized_gripper_pos
-
-    def _set_gripper_position(self, pos: int) -> None:
+    def _set_prune_position(self, pos: int) -> None:
+        # print(f'POS = {pos}')
         if self.robot is None:
-            return
-        # self.xarm_sub.set_gripper_position
-        # self.robot.set_gripper_position(pos, wait=False)
-        # Set up min and max value being read
-        
-        gripper_closed = 2444
-        gripper_open = 32467
-        scale_range = gripper_open - gripper_closed
-        raw_scaled_value = int(255 -  (( (np.rad2deg(pos)*255/360) - gripper_closed) * 255 / scale_range) )
+            return        
+        raw_scaled_value = pos * 255
 
         # Clamp value
         clamped_value = max(0, min(255, int(round(raw_scaled_value))))  
-        
+        # print(f"DEBUG ---> CLAMPED VALUE: {clamped_value}")
         # Prepare to send message
         msg = std_msgs.msg.Int16()
-        msg.data = clamped_value
-        # print(msg.data)
+        if clamped_value < 100:
+            msg.data = 0
+        elif (clamped_value > 100) and (clamped_value < 200):
+            msg.data = 1
+        else:
+            msg.data = 2
+        # print(f'DEBUG ---> OUTPUT: {msg.data}')
 
         # Send message
-        self.gripper_pose_pub.publish(msg)
+        self.prune_pose_pub.publish(msg)
 
     def _robot_thread(self):
         rate = Rate(
@@ -273,7 +259,7 @@ class XArmRobot(Robot):
                 joint_delta = np.array(
                     self.target_command["joints"] - self.last_state.joints()
                 )
-                gripper_command = self.target_command["gripper"]
+                prune_command = self.target_command["prune"]
 
             norm = np.linalg.norm(joint_delta)
 
@@ -288,12 +274,9 @@ class XArmRobot(Robot):
                 self.last_state.joints() + delta,
             )
 
-            if gripper_command is not None:
-                set_point = gripper_command
-                self._set_gripper_position(
-                    self.GRIPPER_OPEN
-                    + set_point * (self.GRIPPER_CLOSE - self.GRIPPER_OPEN)
-                )
+            if prune_command is not None:
+                set_point = prune_command
+                self._set_prune_position(set_point)
             self.last_state = self._update_last_state()
 
             rate.sleep()
@@ -311,18 +294,11 @@ class XArmRobot(Robot):
     def _update_last_state(self) -> RobotState:
         with self.last_state_lock:
             if self.robot is None:
-                return RobotState(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, np.zeros(3))
+                return RobotState(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, np.zeros(3))           
+            
+            prune_pos = self.prune_pose_sub.get_latest_position()
 
-            # print("attempting to get gripper pose")
-            # gripper_pos = self._get_gripper_pos()
-            raw_gripper_pos = self.gripper_pose_sub.get_latest_position()
-            gripper_pos = max(0.0, min(1.0, float(raw_gripper_pos) / 255.0))  # Normalize & clamp
-
-            # print(f'gripper_pose = {gripper_pos}')
-            # gripper_pos = 0.0
-            # print(f"Latest gripper position: {gripper_pos}")           
             code, servo_angle = self.robot.get_servo_angle(is_radian=True)
-
             while code != 0:
                 print(f"Error code {code} in get_servo_angle().")
                 self._clear_error_states()
@@ -341,7 +317,7 @@ class XArmRobot(Robot):
             return RobotState.from_robot(
                 cart_pos,
                 servo_angle,
-                gripper_pos,
+                prune_pos,
                 aa,
             )
 
@@ -359,17 +335,17 @@ class XArmRobot(Robot):
     def get_observations(self) -> Dict[str, np.ndarray]:
         state = self.get_state()
         pos_quat = np.concatenate([state.cartesian_pos(), state.quat()])
-        joints = self.get_joint_state() 
+        joints = self.get_joint_state()
         return {
-            "joint_positions": joints,  # rotational joint + gripper state
+            "joint_positions": joints,  # rotational joint + prune state
             "joint_velocities": joints,
             "ee_pos_quat": pos_quat,
-            "gripper_position": np.array(state.gripper_pos()),
+            "prune_position": np.array(state.prune_pos()),
         }
 
 def main():
     ip = "192.168.1.226"
-    robot = XArmRobot(ip)
+    robot = XArmRobotPrune(ip)
     import time
 
     time.sleep(1)
