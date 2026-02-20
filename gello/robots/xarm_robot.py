@@ -183,7 +183,9 @@ class XArmRobot(Robot):
 
         self.last_state_lock = threading.Lock()
         self.target_command_lock = threading.Lock()
+
         self.last_state = self._update_last_state()
+
         self.target_command = {
             "joints": self.last_state.joints(),
             "gripper": 0,
@@ -236,60 +238,16 @@ class XArmRobot(Robot):
         # self.robot.set_gripper_speed(3000)
         time.sleep(1)
 
-    # def _get_gripper_pos(self) -> float:
-    #     if self.robot is None:
-    #         return 0.0
-    #     code, gripper_pos = self.robot.get_gripper_position()
-    #     while code != 0 or gripper_pos is None:
-    #         print(f"Error code {code} in get_gripper_position(). {gripper_pos}")
-    #         time.sleep(0.001)
-    #         code, gripper_pos = self.robot.get_gripper_position()
-    #         if code == 22:
-    #             self._clear_error_states()
-
-    #     normalized_gripper_pos = (gripper_pos - self.GRIPPER_OPEN) / (
-    #         self.GRIPPER_CLOSE - self.GRIPPER_OPEN
-    #     )
-    #     return normalized_gripper_pos
-
-    # def _set_gripper_position(self, pos: int) -> None:
-    #     if self.robot is None:
-    #         return
-    #     # self.xarm_sub.set_gripper_position
-    #     # self.robot.set_gripper_position(pos, wait=False)
-    #     # Set up min and max value being read
-        
-    #     gripper_closed = 2444
-    #     gripper_open = 32467
-    #     scale_range = gripper_open - gripper_closed
-    #     raw_scaled_value = int(255 -  (( (np.rad2deg(pos)*255/360) - gripper_closed) * 255 / scale_range) )
-
-    #     # Clamp value
-    #     clamped_value = max(0, min(255, int(round(raw_scaled_value))))  
-        
-    #     # Prepare to send message
-    #     msg = std_msgs.msg.Int16()
-    #     msg.data = clamped_value
-    #     # print(msg.data)
-
-    #     # Send message
-    #     self.gripper_pose_pub.publish(msg)
-    
-
-        # while self.robot.get_is_moving():
-        #     time.sleep(0.01)
-        # while self.robot.get_is_moving():
-        #     time.sleep(0.01)
-
     def _robot_thread(self):
         rate = Rate(
             duration=1 / self._control_frequency
         )  # command and update rate for robot
-        step_times = []
-        count = 0
+
+        # from ..utils.timing import RateCalculator
+        # rate_calculator = RateCalculator()
+        # count = 0
 
         while self.running:
-            s_t = time.time()
             # update last state
             self.last_state = self._update_last_state()
             with self.target_command_lock:
@@ -311,42 +269,23 @@ class XArmRobot(Robot):
                 self.last_state.joints() + delta,
             )
 
-            # if gripper_command is not None:
-            #     set_point = gripper_command
-            #     self._set_gripper_position(
-            #         self.GRIPPER_OPEN
-            #         + set_point * (self.GRIPPER_CLOSE - self.GRIPPER_OPEN)
-            #     )
-            self.last_state = self._update_last_state()
+            # self.last_state = self._update_last_state()
 
             rate.sleep()
-            step_times.append(time.time() - s_t)
-            count += 1
-            if count % 1000 == 0:
-                # Mean, Std, Min, Max, only show 3 decimal places and string pad with 10 spaces
-                frequency = 1 / np.mean(step_times)
-                # print(f"Step time - mean: {np.mean(step_times):10.3f}, std: {np.std(step_times):10.3f}, min: {np.min(step_times):10.3f}, max: {np.max(step_times):10.3f}")
-                # print(
-                #     f"Low  Level Frequency - mean: {frequency:10.3f}, std: {np.std(frequency):10.3f}, min: {np.min(frequency):10.3f}, max: {np.max(frequency):10.3f}"
-                # )
-                step_times = []
+
+            # rate_calculator.append_sample(time.monotonic())
+            # count += 1
+
+            # if count > 100:
+            #     count = 0
+            #     print(rate_calculator)
 
     def _update_last_state(self) -> RobotState:
         with self.last_state_lock:
             if self.robot is None:
                 return RobotState(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, np.zeros(3))
 
-            # print("attempting to get gripper pose")
-            # gripper_pos = self._get_gripper_pos()
-            
-            
-            # raw_gripper_pos = self.gripper_pose_sub.get_latest_position()
-            # gripper_pos = max(0.0, min(1.0, float(raw_gripper_pos) / 255.0))  # Normalize & clamp
-
-
-            # nidhi
             gripper_pos =0
-
 
             # print(f'gripper_pose = {gripper_pos}')
             # gripper_pos = 0.0
@@ -388,8 +327,7 @@ class XArmRobot(Robot):
             self._clear_error_states()
 
 
-    def get_sensor_positions(self, pos):
-        return self.sensor_calculator.calculate_absolute_positions(pos[0:3])
+
 
     # def get_tactile_data(self):
     #     force = np.concatenate([self.sensor.sensor_data_group1[-1], self.sensor.sensor_data_group2[-1]])
@@ -398,16 +336,14 @@ class XArmRobot(Robot):
     def get_observations(self) -> Dict[str, np.ndarray]:
         state = self.get_state()
         pos_quat = np.concatenate([state.cartesian_pos(), state.quat()])
-        joints = self.get_joint_state()
+        joints = self.get_joint_state()  
 
-        joints = self.get_joint_state()     
         return {
             "joint_positions": joints,  # rotational joint + gripper state
             "joint_velocities": joints,
             "ee_pos_quat": pos_quat,
             "gripper_position": np.array(state.gripper_pos()),
             "target_position": self.target_position
-
         }
 
 

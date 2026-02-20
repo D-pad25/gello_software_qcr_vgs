@@ -18,6 +18,14 @@ class Rate:
         self.last = time.time()
 
 
+class FastRate:
+    def __init__(self, rate: float):
+        self.snooze = 1.0 / rate
+
+    def sleep(self) -> None:
+        time.sleep(self.snooze)
+
+
 class RobotEnv:
     def __init__(
         self,
@@ -30,6 +38,11 @@ class RobotEnv:
         self._rate = Rate(control_rate_hz)
         self._camera_dict = {} if camera_dict is None else camera_dict
         self._tactile_client = tactile_client  
+        self._seqno: int = -1
+
+        # from .utils.timing import RateCalculator
+        # self._rate_calculator = RateCalculator()
+        # self._count = 0
 
     def robot(self) -> Robot:
         """Get the robot object.
@@ -86,6 +99,13 @@ class RobotEnv:
             # observations["tactile_last_ok_time"] = tact_obs["tactile_last_ok_time"]
             observations["tactile_data"] = tact_obs["tactile_data"]      # (32,3) or None
             observations["tact_time"] = tact_obs["tact_time"]
+
+        # self._rate_calculator.append_sample(time.monotonic())
+        # self._count += 1
+
+        # if self._count == 100:
+        #     self._count = 0
+        #     print(self._rate_calculator)
 
         return observations
 

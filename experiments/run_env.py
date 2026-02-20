@@ -59,20 +59,20 @@ class Args:
     base_camera_port: int = 4001
     hostname: str = "127.0.0.1"
     robot_type: str = None  # only needed for quest agent or spacemouse agent
-    hz: int = 100
+    hz: int = 30
     start_joints: Optional[Tuple[float, ...]] = None
 
     gello_port: Optional[str] = "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FT9HDFUF-if00-port0"
     mock: bool = False
     use_save_interface: bool = False
-    # data_dir: str = "~/gello_nidhi/"
-    data_dir: str = "/run/user/1001/gvfs/sftp:host=aqua.qut.edu.au,user=n11457830/mnt/hpccs01/home/n11457830/gello/dec19_tact/"
+    data_dir: str = "~/left_sensor/"
+    # data_dir: str = "/run/user/1001/gvfs/sftp:host=aqua.qut.edu.au,user=n11457830/mnt/hpccs01/home/n11457830/gello/dec19_tact/"
     bimanual: bool = False
     verbose: bool = False
     use_sesnor: bool = True
     use_sensor: bool = True
     tactile_port: int = 7001
-    tactile_hz: int = 100
+    tactile_hz: int = 30
 
     def __post_init__(self):
         if self.start_joints is not None:

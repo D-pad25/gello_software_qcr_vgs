@@ -17,4 +17,4 @@ agent:
     gripper_config: [7, 0, 0]
   start_joints: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
 
-hz: 30
+hz: 100
