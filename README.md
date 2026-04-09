@@ -1,3 +1,12 @@
+
+
+add the target in the robot viz, change the target in the xarm_robot.py, 
+
+
+
+
+
+
 # GELLO: General, Low-Cost, and Intuitive Teleoperation Framework
 
 <p align="center">

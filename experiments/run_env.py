@@ -19,7 +19,7 @@ from gello.zmq_core.camera_node import ZMQClientCamera
 from gello.robots.xarm_robot import Rate
 from experiments.zmq_tactile_client import ZMQClientTactile
 
-
+from gello.zmq_core.camera_node import ZMQClientCamera
 
 # from spatialmath import SE3
 # from roboticstoolbox import DHRobot, RevoluteDH, Robot
@@ -65,7 +65,7 @@ class Args:
     gello_port: Optional[str] = "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FT9HDFUF-if00-port0"
     mock: bool = False
     use_save_interface: bool = False
-    data_dir: str = "~/left_sensor/"
+    data_dir: str = "~/reach_fruit_vision/"
     # data_dir: str = "/run/user/1001/gvfs/sftp:host=aqua.qut.edu.au,user=n11457830/mnt/hpccs01/home/n11457830/gello/dec19_tact/"
     bimanual: bool = False
     verbose: bool = False
@@ -85,11 +85,7 @@ def main(args):
         robot_client = PrintRobot(8, dont_print=True)
         camera_clients = {}
     else:
-        camera_clients = {
-            # you can optionally add camera nodes here for imitation learning purposes
-            # "wrist": ZMQClientCamera(port=args.wrist_camera_port, host=args.hostname),
-            # "base": ZMQClientCamera(port=args.base_camera_port, host=args.hostname),
-        }
+    
         robot_client = ZMQClientRobot(port=args.robot_port, host=args.hostname)
         tactile_client = None
         if args.use_sensor:
@@ -100,7 +96,16 @@ def main(args):
                 timeout_ms=200,
             )
             tactile_client.start()
+
+            camera_clients = {
+            # you can optionally add camera nodes here for imitation learning purposes
+            "wrist": ZMQClientCamera(port=args.wrist_camera_port, host=args.hostname),
+            # "base": ZMQClientCamera(port=args.base_camera_port, host=args.hostname),
+            }
+        robot_client = ZMQClientRobot(port=args.robot_port, host=args.hostname)
+
     env = RobotEnv(robot_client, control_rate_hz=args.hz, camera_dict=camera_clients, tactile_client=tactile_client)
+
 
     agent_cfg = {}
     if args.bimanual:

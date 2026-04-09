@@ -16,7 +16,7 @@ MENAGERIE_ROOT: Path = Path(__file__).parent / "third_party" / "mujoco_menagerie
 
 @dataclass
 class Args:
-    port: str = "/dev/ttyUSB0"
+    port: str = "/dev/ttyUSB44"
     """The port that GELLO is connected to."""
 
     start_joints: Tuple[float, ...] = (0, 0, 0, 0, 0, 0)

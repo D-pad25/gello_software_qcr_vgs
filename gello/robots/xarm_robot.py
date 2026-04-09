@@ -128,8 +128,8 @@ class Rate:
 class XArmRobot(Robot):
     GRIPPER_OPEN = 800
     GRIPPER_CLOSE = 0
-    #  MAX_DELTA = 0.2
-    DEFAULT_MAX_DELTA = 0.01
+    #  MAX_DELTA = 0.2 , 0.01
+    DEFAULT_MAX_DELTA = 0.005
 
     def num_dofs(self) -> int:
         return 7
@@ -194,7 +194,7 @@ class XArmRobot(Robot):
         self.command_thread = None
 
 
-        self.target_position = np.asarray([-.226,-.438,0.693])
+        self.target_position = np.asarray([-.45,-.06,0.54])
 
         if real:
             self.command_thread = threading.Thread(target=self._robot_thread)
