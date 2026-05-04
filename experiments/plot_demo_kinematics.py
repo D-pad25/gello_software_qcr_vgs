@@ -64,15 +64,6 @@ def load_pkl(path: Path) -> dict[str, Any]:
 
 
 def get_timestamp(data: dict[str, Any], fallback_idx: int | None = None) -> float | None:
-    tact_time = data.get("tact_time", None)
-    if isinstance(tact_time, dict):
-        for key in ("mess_creation_time", "mess_send_time"):
-            value = tact_time.get(key, None)
-            if value is not None:
-                try:
-                    return float(value)
-                except Exception:
-                    pass
     if fallback_idx is not None:
         return float(fallback_idx)
     return None
@@ -127,13 +118,14 @@ def choose_ee_position(data: dict[str, Any]) -> np.ndarray:
     return ee[:3]
 
 
-def load_demo(demo_dir: Path, prefer_control_joint: bool = True) -> dict[str, Any]:
+def load_demo(demo_dir: Path, prefer_control_joint: bool = True, hz: float = 60.0) -> dict[str, Any]:
     files = sorted_pkl_files(demo_dir)
     if not files:
         raise FileNotFoundError(f"No .pkl files found in {demo_dir}")
 
     times = []
     joint_pos_list = []
+    obs_joint_pos_list = []
     logged_joint_vel_list = []
     ee_pos_list = []
 
@@ -142,6 +134,12 @@ def load_demo(demo_dir: Path, prefer_control_joint: bool = True) -> dict[str, An
         times.append(get_timestamp(data, fallback_idx=i))
         q = choose_joint_positions(data, prefer_control_joint=prefer_control_joint)
         joint_pos_list.append(q)
+        # always load joint_positions (robot observation) for comparison
+        if "joint_positions" in data:
+            obs_q = np.asarray(data["joint_positions"], dtype=float).reshape(-1)
+            obs_joint_pos_list.append(obs_q if obs_q.size > 0 else q)
+        else:
+            obs_joint_pos_list.append(q)
         ee_pos_list.append(choose_ee_position(data))
         logged_joint_vel_list.append(choose_logged_joint_velocity(data, target_dim=q.size))
 
@@ -149,27 +147,22 @@ def load_demo(demo_dir: Path, prefer_control_joint: bool = True) -> dict[str, An
     if any(len(q) != joint_dim for q in joint_pos_list):
         raise ValueError("Inconsistent joint dimension across files")
 
-    t = np.asarray(times, dtype=float)
-    if np.any(~np.isfinite(t)):
-        t = np.arange(len(files), dtype=float)
-    if len(t) >= 2:
-        if np.nanmax(np.abs(np.diff(t))) > 0:
-            t = t - t[0]
-        else:
-            t = np.arange(len(files), dtype=float)
-    else:
-        t = np.arange(len(files), dtype=float)
+    t = np.arange(len(files), dtype=float) / hz
 
     joint_pos = np.vstack(joint_pos_list)
+    obs_joint_pos = np.vstack(obs_joint_pos_list)
     ee_pos = np.vstack(ee_pos_list)
 
-    joint_pos_smooth, joint_vel_from_pos, joint_acc = smooth_and_differentiate(
-        joint_pos, t, window=31, polyorder=3
-    )
+    joint_pos_smooth = joint_pos.copy()
+    joint_vel_from_pos = finite_diff(joint_pos, t)
+    joint_acc = finite_diff(joint_vel_from_pos, t)
 
-    ee_pos_smooth, ee_vel, ee_acc = smooth_and_differentiate(
-        ee_pos, t, window=31, polyorder=3
-)
+    obs_joint_vel = finite_diff(obs_joint_pos, t)
+    obs_joint_acc = finite_diff(obs_joint_vel, t)
+
+    ee_pos_smooth = ee_pos.copy()
+    ee_vel = finite_diff(ee_pos, t)
+    ee_acc = finite_diff(ee_vel, t)
 
     has_logged_joint_vel = all(v is not None for v in logged_joint_vel_list)
     logged_joint_vel = None
@@ -185,6 +178,8 @@ def load_demo(demo_dir: Path, prefer_control_joint: bool = True) -> dict[str, An
         "joint_pos": joint_pos_smooth,
         "joint_vel": joint_vel_from_pos,
         "joint_acc": joint_acc,
+        "obs_joint_vel": obs_joint_vel,
+        "obs_joint_acc": obs_joint_acc,
         "ee_pos": ee_pos_smooth,
         "ee_vel": ee_vel,
         "ee_acc": ee_acc,
@@ -208,23 +203,44 @@ def plot_matrix(t: np.ndarray, y: np.ndarray, title: str, ylabel: str, labels: l
     return fig
 
 
+def plot_vel_comparison(t: np.ndarray, ctrl_vel: np.ndarray, obs_vel: np.ndarray, labels: list[str], out_path: Path | None = None):
+    n_joints = ctrl_vel.shape[1]
+    fig, axes = plt.subplots(n_joints, 1, figsize=(12, 2.5 * n_joints), sharex=True, squeeze=False)
+    axes = axes[:, 0]
+    for i, ax in enumerate(axes):
+        ax.plot(t, ctrl_vel[:, i], label="control_joint vel", linewidth=1.2)
+        ax.plot(t, obs_vel[:, i], label="joint_positions vel", linewidth=1.2, linestyle="--", alpha=0.8)
+        ax.set_ylabel(labels[i])
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=8, loc="upper right")
+    axes[-1].set_xlabel("time [s]")
+    fig.suptitle("Joint velocity: control_joint vs joint_positions (obs)", y=1.01)
+    fig.tight_layout()
+    if out_path is not None:
+        fig.savefig(out_path, dpi=200, bbox_inches="tight")
+    return fig
+
+
 def save_all_plots(results: dict[str, Any], out_dir: Path):
     out_dir.mkdir(parents=True, exist_ok=True)
     t = results["t"]
     joint_pos = results["joint_pos"]
     joint_vel = results["joint_vel"]
-    joint_acc = results["joint_acc"]
+    obs_joint_vel = results["obs_joint_vel"]
+    obs_joint_acc = results["obs_joint_acc"]
     ee_pos = results["ee_pos"]
     ee_vel = results["ee_vel"]
     ee_acc = results["ee_acc"]
 
     joint_labels = [f"j{i+1}" for i in range(joint_pos.shape[1])]
+    obs_joint_labels = [f"j{i+1}" for i in range(obs_joint_vel.shape[1])]
     ee_labels = ["x", "y", "z"]
 
     figs = []
     figs.append(plot_matrix(t, joint_pos, "Joint position vs time", "joint position [rad]", joint_labels, out_dir / "joint_position.png"))
-    figs.append(plot_matrix(t, joint_vel, "Joint velocity vs time", "joint velocity [rad/s]", joint_labels, out_dir / "joint_velocity.png"))
-    figs.append(plot_matrix(t, joint_acc, "Joint acceleration vs time", "joint acceleration [rad/s^2]", joint_labels, out_dir / "joint_acceleration.png"))
+    figs.append(plot_matrix(t, obs_joint_vel, "Joint velocity vs time (from joint_positions)", "joint velocity [rad/s]", obs_joint_labels, out_dir / "joint_velocity.png"))
+    figs.append(plot_vel_comparison(t, joint_vel, obs_joint_vel[:, :joint_vel.shape[1]], joint_labels, out_dir / "joint_velocity_comparison.png"))
+    figs.append(plot_matrix(t, obs_joint_acc, "Joint acceleration vs time (from joint_positions)", "joint acceleration [rad/s^2]", obs_joint_labels, out_dir / "joint_acceleration.png"))
     figs.append(plot_matrix(t, ee_pos, "End-effector position vs time", "position [m]", ee_labels, out_dir / "ee_position.png"))
     figs.append(plot_matrix(t, ee_vel, "End-effector velocity vs time", "velocity [m/s]", ee_labels, out_dir / "ee_velocity.png"))
     figs.append(plot_matrix(t, ee_acc, "End-effector acceleration vs time", "acceleration [m/s^2]", ee_labels, out_dir / "ee_acceleration.png"))
@@ -253,11 +269,12 @@ def main():
         action="store_true",
         help="Use joint_positions instead of control_joint. By default, control_joint is used when available.",
     )
+    parser.add_argument("--hz", type=float, default=30.0, help="Recording frequency in Hz (default: 60)")
     parser.add_argument("--show", action="store_true", help="Display figures interactively")
     args = parser.parse_args()
 
     prefer_control_joint = not args.use_joint_positions
-    results = load_demo(args.demo_dir, prefer_control_joint=prefer_control_joint)
+    results = load_demo(args.demo_dir, prefer_control_joint=prefer_control_joint, hz=args.hz)
 
     out_dir = args.out_dir if args.out_dir is not None else args.demo_dir / "plots"
     save_all_plots(results, out_dir)
