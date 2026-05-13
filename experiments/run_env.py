@@ -65,7 +65,7 @@ class Args:
     gello_port: Optional[str] = "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FT9HDFUF-if00-port0"
     mock: bool = False
     use_save_interface: bool = False
-    data_dir: str = "~/reach_anytarget_leftcontact_slow_speed_1/"
+    data_dir: str = "~/test/"
     # data_dir: str = "/run/user/1001/gvfs/sftp:host=aqua.qut.edu.au,user=n11457830/mnt/hpccs01/home/n11457830/gello/dec19_tact/"
     bimanual: bool = False
     verbose: bool = False
