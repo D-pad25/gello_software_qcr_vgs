@@ -21,7 +21,7 @@ class KBReset:
         if KEY_QUIT_RECORDING in pressed_last:
             self._set_color(RED)
             self._saved = False
-            return "normal"
+            return "quit"
 
         if self._saved:
             return "save"

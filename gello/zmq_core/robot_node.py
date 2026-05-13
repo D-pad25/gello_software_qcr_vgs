@@ -48,6 +48,12 @@ class ZMQServerRobot:
                     result = self._robot.command_joint_state(**args)
                 elif method == "get_observations":
                     result = self._robot.get_observations()
+                elif method == "set_target_position":
+                    result = self._robot.set_target_position(**args)
+                elif method == "set_init_position":
+                    result = self._robot.set_init_position(**args)
+                elif method == "set_sensor_contact_position":
+                    result = self._robot.set_sensor_contact_position(**args)
                 else:
                     result = {"error": "Invalid method"}
                     print(result)
@@ -133,6 +139,21 @@ class ZMQClientRobot(Robot):
             return result
         except zmq.Again:
             raise RuntimeError("ZMQ timeout - robot may be disconnected")
+
+    def set_target_position(self, pos: np.ndarray) -> None:
+        request = {"method": "set_target_position", "args": {"pos": pos}}
+        self._socket.send(pickle.dumps(request))
+        self._socket.recv()
+
+    def set_init_position(self, pos: np.ndarray) -> None:
+        request = {"method": "set_init_position", "args": {"pos": pos}}
+        self._socket.send(pickle.dumps(request))
+        self._socket.recv()
+
+    def set_sensor_contact_position(self, pos: np.ndarray) -> None:
+        request = {"method": "set_sensor_contact_position", "args": {"pos": pos}}
+        self._socket.send(pickle.dumps(request))
+        self._socket.recv()
 
     def close(self) -> None:
         """Close the ZMQ socket and context."""

@@ -92,7 +92,8 @@ class RobotEnv:
         observations["joint_velocities"] = robot_obs["joint_velocities"]
         observations["ee_pos_quat"] = robot_obs["ee_pos_quat"]
         observations["gripper_position"] = robot_obs["gripper_position"]
-        observations["target_position"]  = robot_obs["target_position"]  
+        observations["target_position"] = robot_obs["target_position"]
+        observations["init_position"] = robot_obs["init_position"]
         if self._tactile_client is not None:
             tact_obs = self._tactile_client.get_obs()
             # observations["tactile_ok"] = tact_obs["tactile_ok"]

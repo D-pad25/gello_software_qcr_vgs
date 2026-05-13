@@ -3,7 +3,7 @@ import time
 import datetime
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 from collections import deque
 import numpy as np
 import tyro
@@ -65,14 +65,14 @@ class Args:
     gello_port: Optional[str] = "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FT9HDFUF-if00-port0"
     mock: bool = False
     use_save_interface: bool = False
-    data_dir: str = "~/reach_fruit_vision_slow_speed/"
+    data_dir: str = "~/reach_anytarget_leftcontact_slow_speed_1/"
     # data_dir: str = "/run/user/1001/gvfs/sftp:host=aqua.qut.edu.au,user=n11457830/mnt/hpccs01/home/n11457830/gello/dec19_tact/"
     bimanual: bool = False
     verbose: bool = False
-    use_sesnor: bool = True
-    use_sensor: bool = True
+    use_sensor: bool = False
     tactile_port: int = 7001
     tactile_hz: int = 30
+    config_index: int = 0
 
     def __post_init__(self):
         if self.start_joints is not None:
@@ -80,14 +80,16 @@ class Args:
 
 
 def main(args):
-    # robot_dh = define_xarm6()
+    from gello.utils.control_utils import SaveInterface, run_control_loop
+
+    # --- One-time setup ---
+    tactile_client = None
     if args.mock:
         robot_client = PrintRobot(8, dont_print=True)
         camera_clients = {}
     else:
-    
         robot_client = ZMQClientRobot(port=args.robot_port, host=args.hostname)
-        tactile_client = None
+        camera_clients = {}
         if args.use_sensor:
             tactile_client = ZMQClientTactile(
                 host=args.hostname,
@@ -96,202 +98,196 @@ def main(args):
                 timeout_ms=200,
             )
             tactile_client.start()
-
-            # camera_clients = {
-            # # you can optionally add camera nodes here for imitation learning purposes
-            # "wrist": ZMQClientCamera(port=args.wrist_camera_port, host=args.hostname),
-            # # "base": ZMQClientCamera(port=args.base_camera_port, host=args.hostname),
-            # }
-            camera_clients = {}
-        robot_client = ZMQClientRobot(port=args.robot_port, host=args.hostname)
+            print("Checking tactile server connection...")
+            time.sleep(1.0)
+            snap, _, _ = tactile_client.get_latest()
+            if not snap:
+                raise RuntimeError(
+                    f"Tactile server not reachable at tcp://{args.hostname}:{args.tactile_port}. "
+                    f"Please run: python experiments/tactile_nodes.py"
+                )
 
     env = RobotEnv(robot_client, control_rate_hz=args.hz, camera_dict=camera_clients, tactile_client=tactile_client)
 
+    # Load all configs from CSV once
+    csv_path = Path(__file__).resolve().parent.parent / "scripts" / "init_target_configs_left.csv"
+    configs = np.genfromtxt(csv_path, delimiter=',', names=True, dtype=None, encoding="utf-8")
+    total = len(configs)
+    print(f"Loaded {total} configs from {csv_path.name}. Starting from config {args.config_index}.")
 
-    agent_cfg = {}
+    # --- Build agent (once, reused across configs) ---
     if args.bimanual:
         if args.agent == "gello":
-            # dynamixel control box port map (to distinguish left and right gello)
             right = "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FT7WBG6A-if00-port0"
             left = "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FT7WBEIA-if00-port0"
             agent_cfg = {
                 "_target_": "gello.agents.agent.BimanualAgent",
-                "agent_left": {
-                    "_target_": "gello.agents.gello_agent.GelloAgent",
-                    "port": left,
-                },
-                "agent_right": {
-                    "_target_": "gello.agents.gello_agent.GelloAgent",
-                    "port": right,
-                },
+                "agent_left": {"_target_": "gello.agents.gello_agent.GelloAgent", "port": left},
+                "agent_right": {"_target_": "gello.agents.gello_agent.GelloAgent", "port": right},
             }
         elif args.agent == "quest":
             agent_cfg = {
                 "_target_": "gello.agents.agent.BimanualAgent",
-                "agent_left": {
-                    "_target_": "gello.agents.quest_agent.SingleArmQuestAgent",
-                    "robot_type": args.robot_type,
-                    "which_hand": "l",
-                },
-                "agent_right": {
-                    "_target_": "gello.agents.quest_agent.SingleArmQuestAgent",
-                    "robot_type": args.robot_type,
-                    "which_hand": "r",
-                },
+                "agent_left": {"_target_": "gello.agents.quest_agent.SingleArmQuestAgent", "robot_type": args.robot_type, "which_hand": "l"},
+                "agent_right": {"_target_": "gello.agents.quest_agent.SingleArmQuestAgent", "robot_type": args.robot_type, "which_hand": "r"},
             }
         elif args.agent == "spacemouse":
-            left_path = "/dev/hidraw0"
-            right_path = "/dev/hidraw1"
             agent_cfg = {
                 "_target_": "gello.agents.agent.BimanualAgent",
-                "agent_left": {
-                    "_target_": "gello.agents.spacemouse_agent.SpacemouseAgent",
-                    "robot_type": args.robot_type,
-                    "device_path": left_path,
-                    "verbose": args.verbose,
-                },
-                "agent_right": {
-                    "_target_": "gello.agents.spacemouse_agent.SpacemouseAgent",
-                    "robot_type": args.robot_type,
-                    "device_path": right_path,
-                    "verbose": args.verbose,
-                    "invert_button": True,
-                },
+                "agent_left": {"_target_": "gello.agents.spacemouse_agent.SpacemouseAgent", "robot_type": args.robot_type, "device_path": "/dev/hidraw0", "verbose": args.verbose},
+                "agent_right": {"_target_": "gello.agents.spacemouse_agent.SpacemouseAgent", "robot_type": args.robot_type, "device_path": "/dev/hidraw1", "verbose": args.verbose, "invert_button": True},
             }
         else:
             raise ValueError(f"Invalid agent name for bimanual: {args.agent}")
-
-        # System setup specific. This reset configuration works well on our setup. If you are mounting the robot
-        # differently, you need a separate reset joint configuration.
+        # bimanual reset
         reset_joints_left = np.deg2rad([0, -90, -90, -90, 90, 0, 0])
         reset_joints_right = np.deg2rad([0, -90, 90, -90, -90, 0, 0])
         reset_joints = np.concatenate([reset_joints_left, reset_joints_right])
         curr_joints = env.get_obs()["joint_positions"]
-        max_delta = (np.abs(curr_joints - reset_joints)).max()
-        steps = min(int(max_delta / 0.01), 100)
-
+        steps = min(int(np.abs(curr_joints - reset_joints).max() / 0.01), 100)
         for jnt in np.linspace(curr_joints, reset_joints, steps):
             env.step(jnt)
-    else:
-        if args.agent == "gello":
-            gello_port = args.gello_port
-            if gello_port is None:
-                usb_ports = glob.glob("/dev/serial/by-id/*")
-                print(f"Found {len(usb_ports)} ports")
-                if len(usb_ports) > 0:
-                    gello_port = usb_ports[0]
-                    print(f"using port {gello_port}")
-                else:
-                    raise ValueError(
-                        "No gello port found, please specify one or plug in gello"
-                    )
-            agent_cfg = {
-                "_target_": "gello.agents.gello_agent.GelloAgent",
-                "port": gello_port,
-                "start_joints": args.start_joints,
-            }
-            if args.start_joints is None:
-                reset_joints = np.deg2rad(
-                    [-180, 0, -45, 0, 45, 90]
-                )  # Change this to your own reset joints
-            else:
-                reset_joints = np.array(args.start_joints)
-
-            curr_joints = env.get_obs()["joint_positions"]
-            if reset_joints.shape == curr_joints.shape:
-                max_delta = (np.abs(curr_joints - reset_joints)).max()
-                steps = min(int(max_delta / 0.01), 100)
-
-                for jnt in np.linspace(curr_joints, reset_joints, steps):
-                    env.step(jnt)
-                    time.sleep(0.001)
-        elif args.agent == "quest":
-            agent_cfg = {
-                "_target_": "gello.agents.quest_agent.SingleArmQuestAgent",
-                "robot_type": args.robot_type,
-                "which_hand": "l",
-            }
-        elif args.agent == "spacemouse":
-            agent_cfg = {
-                "_target_": "gello.agents.spacemouse_agent.SpacemouseAgent",
-                "robot_type": args.robot_type,
-                "verbose": args.verbose,
-            }
-        elif args.agent == "dummy" or args.agent == "none":
-            agent_cfg = {
-                "_target_": "gello.agents.agent.DummyAgent",
-                "num_dofs": robot_client.num_dofs(),
-            }
-        elif args.agent == "policy":
-            raise NotImplementedError("add your imitation policy here if there is one")
-        else:
-            raise ValueError("Invalid agent name")
-
-    agent = instantiate_from_dict(agent_cfg)
-    # going to start position
-    print("Going to start position")
-    start_pos = agent.act(env.get_obs())
-    obs = env.get_obs()
-    joints = obs["joint_positions"]
-
-    abs_deltas = np.abs(start_pos - joints)
-    id_max_joint_delta = np.argmax(abs_deltas)
-
-    max_joint_delta = 0.8
-    if abs_deltas[id_max_joint_delta] > max_joint_delta:
-        id_mask = abs_deltas > max_joint_delta
-        print()
-        ids = np.arange(len(id_mask))[id_mask]
-        for i, delta, joint, current_j in zip(
-            ids,
-            abs_deltas[id_mask],
-            start_pos[id_mask],
-            joints[id_mask],
-        ):
-            print(
-                f"joint[{i}]: \t delta: {delta:4.3f} , leader: \t{joint:4.3f} , follower: \t{current_j:4.3f}"
-            )
+        agent: Any = instantiate_from_dict(agent_cfg)
+        run_control_loop(env, agent, None, use_colors=True)
         return
 
-    print(f"Start pos: {len(start_pos)}", f"Joints: {len(joints)}")
-    assert len(start_pos) == len(
-        joints
-    ), f"agent output dim = {len(start_pos)}, but env dim = {len(joints)}"
+    # Single-arm agent setup
+    if args.agent == "gello":
+        gello_port = args.gello_port
+        if gello_port is None:
+            usb_ports = glob.glob("/dev/serial/by-id/*")
+            print(f"Found {len(usb_ports)} ports")
+            if len(usb_ports) > 0:
+                gello_port = usb_ports[0]
+                print(f"using port {gello_port}")
+            else:
+                raise ValueError("No gello port found, please specify one or plug in gello")
+        agent_cfg = {
+            "_target_": "gello.agents.gello_agent.GelloAgent",
+            "port": gello_port,
+            "start_joints": args.start_joints,
+        }
+    elif args.agent == "quest":
+        agent_cfg = {"_target_": "gello.agents.quest_agent.SingleArmQuestAgent", "robot_type": args.robot_type, "which_hand": "l"}
+    elif args.agent == "spacemouse":
+        agent_cfg = {"_target_": "gello.agents.spacemouse_agent.SpacemouseAgent", "robot_type": args.robot_type, "verbose": args.verbose}
+    elif args.agent in ("dummy", "none"):
+        agent_cfg = {"_target_": "gello.agents.agent.DummyAgent", "num_dofs": robot_client.num_dofs()}
+    elif args.agent == "policy":
+        raise NotImplementedError("add your imitation policy here if there is one")
+    else:
+        raise ValueError("Invalid agent name")
 
-    max_delta = 0.05
-    for _ in range(25):
-        obs = env.get_obs()
-        command_joints = agent.act(obs)
-        current_joints = obs["joint_positions"]
-        delta = command_joints - current_joints
-        max_joint_delta = np.abs(delta).max()
-        if max_joint_delta > max_delta:
-            delta = delta / max_joint_delta * max_delta
-        env.step(current_joints + delta)
+    agent: Any = instantiate_from_dict(agent_cfg)
 
-    obs = env.get_obs()
-    joints = obs["joint_positions"]
-    action = agent.act(obs)
-    if (action - joints > 0.5).any():
-        print("Action is too big")
+    # --- Per-config loop ---
+    for config_idx in range(args.config_index, total):
+        print(f"\n{'='*52}")
+        print(f"  Config {config_idx} / {total - 1}")
+        print(f"{'='*52}")
 
-        # print which joints are too big
-        joint_index = np.where(action - joints > 0.8)
-        for j in joint_index:
-            print(
-                f"Joint [{j}], leader: {action[j]}, follower: {joints[j]}, diff: {action[j] - joints[j]}"
-            )
-        exit()
+        cfg = configs[config_idx]
+        init_joints = np.array([cfg['init_j1'], cfg['init_j2'], cfg['init_j3'],
+                                 cfg['init_j4'], cfg['init_j5'], cfg['init_j6']])
+        tgt_position = np.array([cfg['tgt_x'], cfg['tgt_y'], cfg['tgt_z']])
+        tgt_joints = np.array([cfg['tgt_j1'], cfg['tgt_j2'], cfg['tgt_j3'],
+                                cfg['tgt_j4'], cfg['tgt_j5'], cfg['tgt_j6']])
+        contact_joints = np.array([cfg['sensor_contact_j1'], cfg['sensor_contact_j2'], cfg['sensor_contact_j3'],
+                                    cfg['sensor_contact_j4'], cfg['sensor_contact_j5'], cfg['sensor_contact_j6']])
+        contact_orient_deg = float(cfg['contact_orient_x_deg'])
+        contact_type = str(cfg['contact_type']).strip()
+        type_label = {"S": "Small", "M": "Medium", "L": "Large"}.get(contact_type.upper(), contact_type)
 
-    from gello.utils.control_utils import SaveInterface, run_control_loop
+        print(f"  init={np.round(init_joints, 3)}")
+        print(f"  target_pos={np.round(tgt_position, 3)}")
+        print(f"  contact_type={type_label}  contact_orient_x={contact_orient_deg:.2f} deg")
 
-    save_interface = None
-    if args.use_save_interface:
-        save_interface = SaveInterface(
-            data_dir=args.data_dir, agent_name=args.agent, expand_user=True
-        )
+        if not args.mock:
+            robot_client.set_init_position(np.array([cfg['init_x'], cfg['init_y'], cfg['init_z']]))
+            robot_client.set_target_position(tgt_position)
+            robot_client.set_sensor_contact_position(np.array([cfg['sensor_contact_x'], cfg['sensor_contact_y'], cfg['sensor_contact_z']]))
 
-    run_control_loop(env, agent, save_interface, use_colors=True)
+        if args.agent == "gello":
+            curr_joints = env.get_obs()["joint_positions"]
+            gripper = curr_joints[-1:]  # preserve gripper across moves
+            init_cmd = np.concatenate([init_joints, gripper])
+            tgt_cmd = np.concatenate([tgt_joints, gripper])
+
+            print("Moving to init position...")
+            steps = max(50, min(int(np.abs(curr_joints - init_cmd).max() / 0.01), 200))
+            for jnt in np.linspace(curr_joints, init_cmd, steps):
+                env.step(jnt)
+                time.sleep(0.001)
+
+            input("At init position. Press Enter to move to target...")
+
+            print("Moving to target to preview path...")
+            curr_joints = env.get_obs()["joint_positions"]
+            steps = max(50, min(int(np.abs(curr_joints - tgt_cmd).max() / 0.01), 200))
+            for jnt in np.linspace(curr_joints, tgt_cmd, steps):
+                env.step(jnt)
+                time.sleep(0.001)
+
+            input("At target position. Press Enter to move to contact location...")
+
+            contact_cmd = np.concatenate([contact_joints, gripper])
+            print("Moving to contact location...")
+            curr_joints = env.get_obs()["joint_positions"]
+            steps = max(50, min(int(np.abs(curr_joints - contact_cmd).max() / 0.01), 200))
+            for jnt in np.linspace(curr_joints, contact_cmd, steps):
+                env.step(jnt)
+                time.sleep(0.001)
+
+            print(f"\n  Object type  : {type_label} ({contact_type})")
+            print(f"  Contact orient (x): {contact_orient_deg:.2f} deg")
+
+            input("At contact location. Press Enter to move back to init...")
+
+            print("Moving back to init position...")
+            curr_joints = env.get_obs()["joint_positions"]
+            steps = max(50, min(int(np.abs(curr_joints - init_cmd).max() / 0.01), 200))
+            for jnt in np.linspace(curr_joints, init_cmd, steps):
+                env.step(jnt)
+                time.sleep(0.001)
+
+            input("At init position. Press Enter to check gello offset (move gello until offset is near zero)...")
+
+        # Live gello offset display — user moves gello to match robot, then presses Enter
+        import threading
+        stop_event = threading.Event()
+
+        def _wait_enter():
+            input("Press Enter when gello offset is near zero to collect data...")
+            stop_event.set()
+
+        enter_thread = threading.Thread(target=_wait_enter, daemon=True)
+        enter_thread.start()
+
+        print("Move gello to match robot position. Offset per joint:")
+        while not stop_event.is_set():
+            obs = env.get_obs()
+            gello_pos = agent.act(obs)
+            offset = gello_pos - obs["joint_positions"]
+            max_offset = np.abs(offset).max()
+            flag = "\033[92m[OK - ready to collect]\033[0m" if max_offset <= np.deg2rad(3) else "\033[91m[NOT OK]\033[0m"
+            print(f"\r  offset={np.round(offset, 3)}  max={max_offset:.3f}  {flag}   ", end="", flush=True)
+            time.sleep(0.1)
+        print()
+
+        save_interface = None
+        if args.use_save_interface:
+            label = f"{args.agent}_contact" if args.use_sensor else args.agent
+            if args.use_sensor:
+                tact_check = env.get_obs().get("tactile_data")
+                if tact_check is None:
+                    print("\033[93m[WARNING] Tactile sensor not yet calibrated — tactile_data will be None until calibration completes.\033[0m")
+                else:
+                    print(f"\033[92m[OK] Tactile data ready, shape={tact_check.shape}\033[0m")
+            save_interface = SaveInterface(data_dir=args.data_dir, agent_name=label, expand_user=True)
+
+        run_control_loop(env, agent, save_interface, use_colors=True)
+        print(f"\nConfig {config_idx} complete. Next config index to resume from: {config_idx + 1}")
+        input(f"Press Enter to move to config {config_idx + 1} init position...")
 
 
 if __name__ == "__main__":

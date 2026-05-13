@@ -64,12 +64,12 @@ class Args:
     height: int = 1100
 
     # Workspace bounds
-    x_min: float = 0.35
+    x_min: float = 0.25
     x_max: float = 0.55
     y_min: float = -0.1
     y_max: float = 0.1
-    z_min: float = 0.3
-    z_max: float = 0.5
+    z_min: float = 0.4
+    z_max: float = 0.6
 
     # Initial target
     target_x: float = 0.54
@@ -285,6 +285,14 @@ def main(args: Args):
     target_xy = (float(target_xyz[0]), float(target_xyz[1]))
     target_xz = (float(target_xyz[0]), float(target_xyz[2]))
 
+    init_xyz = target_xyz.copy()
+    init_xy = (float(init_xyz[0]), float(init_xyz[1]))
+    init_xz = (float(init_xyz[0]), float(init_xyz[2]))
+
+    sensor_contact_xyz = target_xyz.copy()
+    sensor_contact_xy = (float(sensor_contact_xyz[0]), float(sensor_contact_xyz[1]))
+    sensor_contact_xz = (float(sensor_contact_xyz[0]), float(sensor_contact_xyz[2]))
+
     trail_xy = deque(maxlen=args.trail_len_xy)
     trail_xz = deque(maxlen=args.trail_len_xz)
 
@@ -319,6 +327,23 @@ def main(args: Args):
                 latest_xyz = extract_xyz_from_obs(
                     latest_obs, use_fk_fallback=args.use_fk_fallback
                 )
+
+                # Update target and init from robot observations if available
+                if "target_position" in latest_obs:
+                    t = np.asarray(latest_obs["target_position"], dtype=np.float64).reshape(-1)
+                    target_xyz = t[:3]
+                    target_xy = (float(target_xyz[0]), float(target_xyz[1]))
+                    target_xz = (float(target_xyz[0]), float(target_xyz[2]))
+                if "init_position" in latest_obs:
+                    p = np.asarray(latest_obs["init_position"], dtype=np.float64).reshape(-1)
+                    init_xyz = p[:3]
+                    init_xy = (float(init_xyz[0]), float(init_xyz[1]))
+                    init_xz = (float(init_xyz[0]), float(init_xyz[2]))
+                if "sensor_contact_position" in latest_obs:
+                    sc = np.asarray(latest_obs["sensor_contact_position"], dtype=np.float64).reshape(-1)
+                    sensor_contact_xyz = sc[:3]
+                    sensor_contact_xy = (float(sensor_contact_xyz[0]), float(sensor_contact_xyz[1]))
+                    sensor_contact_xz = (float(sensor_contact_xyz[0]), float(sensor_contact_xyz[2]))
 
                 trail_xy.append((float(latest_xyz[0]), float(latest_xyz[1])))
                 trail_xz.append((float(latest_xyz[0]), float(latest_xyz[2])))
@@ -371,12 +396,32 @@ def main(args: Args):
             invert_v=False,
         )
 
+        # Draw init position as green dot on both panels
+        init_color = (50, 200, 50)
+        for rect, uv, u_min, u_max, v_min, v_max in [
+            (xy_rect, init_xy, args.x_min, args.x_max, args.y_min, args.y_max),
+            (xz_rect, init_xz, args.x_min, args.x_max, args.z_min, args.z_max),
+        ]:
+            ix, iy = world_to_panel(uv[0], uv[1], u_min, u_max, v_min, v_max, rect)
+            pygame.draw.circle(screen, init_color, (ix, iy), 9)
+            pygame.draw.circle(screen, (0, 0, 0), (ix, iy), 9, 2)
+
+        # Draw sensor contact position as yellow dot on both panels
+        sensor_color = (255, 220, 0)
+        for rect, uv, u_min, u_max, v_min, v_max in [
+            (xy_rect, sensor_contact_xy, args.x_min, args.x_max, args.y_min, args.y_max),
+            (xz_rect, sensor_contact_xz, args.x_min, args.x_max, args.z_min, args.z_max),
+        ]:
+            sx, sy = world_to_panel(uv[0], uv[1], u_min, u_max, v_min, v_max, rect)
+            pygame.draw.circle(screen, sensor_color, (sx, sy), 9)
+            pygame.draw.circle(screen, (0, 0, 0), (sx, sy), 9, 2)
+
         if args.show_text:
             text_color = (20, 20, 20)
             lines = [
                 f"Robot server: {args.hostname}:{args.robot_port}",
                 f"Polling: {args.hz:.1f} Hz",
-                f"Target XYZ: ({args.target_x:.3f}, {args.target_y:.3f}, {args.target_z:.3f}) m",
+                f"Target XYZ: ({target_xyz[0]:.3f}, {target_xyz[1]:.3f}, {target_xyz[2]:.3f}) m",
                 "Press SPACE to clear trail",
             ]
             if latest_xyz is not None:

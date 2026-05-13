@@ -195,6 +195,8 @@ class XArmRobot(Robot):
 
 
         self.target_position = np.asarray([-.45,-.06,0.54])
+        self.init_position = np.asarray([-.45,-.06,0.54])
+        self.sensor_contact_position = np.asarray([-.45,-.06,0.54])
 
         if real:
             self.command_thread = threading.Thread(target=self._robot_thread)
@@ -333,17 +335,28 @@ class XArmRobot(Robot):
     #     force = np.concatenate([self.sensor.sensor_data_group1[-1], self.sensor.sensor_data_group2[-1]])
     #     return force 
     
+    def set_target_position(self, pos: np.ndarray) -> None:
+        self.target_position = np.asarray(pos)
+
+    def set_init_position(self, pos: np.ndarray) -> None:
+        self.init_position = np.asarray(pos)
+
+    def set_sensor_contact_position(self, pos: np.ndarray) -> None:
+        self.sensor_contact_position = np.asarray(pos)
+
     def get_observations(self) -> Dict[str, np.ndarray]:
         state = self.get_state()
         pos_quat = np.concatenate([state.cartesian_pos(), state.quat()])
-        joints = self.get_joint_state()  
+        joints = self.get_joint_state()
 
         return {
             "joint_positions": joints,  # rotational joint + gripper state
             "joint_velocities": joints,
             "ee_pos_quat": pos_quat,
             "gripper_position": np.array(state.gripper_pos()),
-            "target_position": self.target_position
+            "target_position": self.target_position,
+            "init_position": self.init_position,
+            "sensor_contact_position": self.sensor_contact_position,
         }
 
 

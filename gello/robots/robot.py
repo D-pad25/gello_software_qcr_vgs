@@ -74,6 +74,15 @@ class PrintRobot(Robot):
         if not self._dont_print:
             print(self._joint_state)
 
+    def set_target_position(self, pos: np.ndarray) -> None:
+        pass
+
+    def set_init_position(self, pos: np.ndarray) -> None:
+        pass
+
+    def set_sensor_contact_position(self, pos: np.ndarray) -> None:
+        pass
+
     def get_observations(self) -> Dict[str, np.ndarray]:
         joint_state = self.get_joint_state()
         pos_quat = np.zeros(7)
