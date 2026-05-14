@@ -22,10 +22,10 @@ def main(args):
     import cv2
 
     images_display_names = []
-    for port in args.ports:
-        cameras.append(ZMQClientCamera(port=port, host=args.hostname))
-        images_display_names.append(f"image_{port}")
-        cv2.namedWindow(images_display_names[-1], cv2.WINDOW_NORMAL)
+    # for port in args.ports:
+    #     cameras.append(ZMQClientCamera(port=port, host=args.hostname))
+    #     images_display_names.append(f"image_{port}")
+    #     cv2.namedWindow(images_display_names[-1], cv2.WINDOW_NORMAL)
 
     # For single camera
     cameras.append(ZMQClientCamera(port=args.port, host=args.hostname))
