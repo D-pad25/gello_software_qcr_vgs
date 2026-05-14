@@ -203,9 +203,9 @@ def main(args):
 
         if args.agent == "gello":
             curr_joints = env.get_obs()["joint_positions"]
-            #gripper = curr_joints[-1:]  # preserve gripper across moves
-            init_cmd = np.concatenate([init_joints])
-            tgt_cmd = np.concatenate([tgt_joints])
+            gripper = curr_joints[-1:]  # preserve gripper across moves
+            init_cmd = np.concatenate([init_joints, gripper])
+            tgt_cmd = np.concatenate([tgt_joints, gripper])
 
             print("Moving to init position...")
             steps = max(50, min(int(np.abs(curr_joints - init_cmd).max() / 0.01), 200))
