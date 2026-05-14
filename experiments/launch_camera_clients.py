@@ -22,10 +22,10 @@ def main(args):
     import cv2
 
     images_display_names = []
-    # for port in args.ports:
-    #     cameras.append(ZMQClientCamera(port=port, host=args.hostname))
-    #     images_display_names.append(f"image_{port}")
-    #     cv2.namedWindow(images_display_names[-1], cv2.WINDOW_NORMAL)
+    for port in args.ports:
+        cameras.append(ZMQClientCamera(port=port, host=args.hostname))
+        images_display_names.append(f"image_{port}")
+        cv2.namedWindow(images_display_names[-1], cv2.WINDOW_NORMAL)
 
     # For single camera
     cameras.append(ZMQClientCamera(port=args.port, host=args.hostname))
@@ -33,8 +33,8 @@ def main(args):
     while True:
         for display_name, camera in zip(images_display_names, cameras):
             image, depth = camera.read()
-            # stacked_depth = np.dstack([depth, depth, depth]).astype(np.uint8)
-            # image_depth = cv2.hconcat([image[:, :, ::-1], stacked_depth])
+            #stacked_depth = np.dstack([depth, depth, depth]).astype(np.uint8)
+            #image_depth = cv2.hconcat([image[:, :, ::-1], stacked_depth])
             cv2.imshow(display_name, image)
             cv2.waitKey(1)
 
