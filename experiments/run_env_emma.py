@@ -62,7 +62,7 @@ class Args:
     gello_port: Optional[str] = "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FT9HDFUF-if00-port0"
     mock: bool = False
     use_save_interface: bool = False
-    data_dir: str = "~/test/"
+    data_dir: str = "~/Emma's Demos/"
     bimanual: bool = False
     verbose: bool = False
     use_sensor: bool = False
